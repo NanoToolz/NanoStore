@@ -327,6 +327,13 @@ async def create_coupon(code, discount_percent, max_uses=-1):
         )
         await db.commit()
 
+async def get_coupon(code):
+    """Get a single coupon by code."""
+    async with aiosqlite.connect(DATABASE) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM coupons WHERE code=?", (code.upper(),)) as cur:
+            return await cur.fetchone()
+
 async def validate_coupon(code):
     async with aiosqlite.connect(DATABASE) as db:
         db.row_factory = aiosqlite.Row
