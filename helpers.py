@@ -1,6 +1,7 @@
 """NanoStore helper utilities — safe_edit, formatting, logging, force join, etc."""
 
 import logging
+import asyncio
 from html import escape
 from telegram import InlineKeyboardMarkup
 from config import LOG_CHANNEL_ID
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 async def safe_edit(
     query,
     text: str,
-    reply_markup: InlineKeyboardMarkup = None,
+    reply_markup: InlineKeyboardMarkup | None = None,
     parse_mode: str = "HTML",
 ) -> None:
     """Safely edit a callback query message.
@@ -163,6 +164,62 @@ async def log_action(bot, text: str) -> None:
         )
     except Exception as e:
         logger.warning("Failed to log to channel: %s", e)
+
+
+async def notify_log_channel(bot, text: str) -> None:
+    """Backward-compatible wrapper for logging helper.
+
+    Used by newer handlers; internally calls log_action.
+    """
+    await log_action(bot, text)
+
+
+# ════════════════════════ AUTO-DELETE & TYPING ════════════════════════
+
+async def send_typing(chat_id: int, bot) -> None:
+    """Send 'typing' action to give instant feedback to the user."""
+    try:
+        await bot.send_chat_action(chat_id=chat_id, action="typing")
+    except Exception as e:
+        logger.warning("send_typing failed: %s", e)
+
+
+async def auto_delete(message, delay: int | None = None) -> None:
+    """Schedule auto-deletion of a message.
+
+    If delay is None, reads the `auto_delete` setting from DB (seconds).
+    0 or invalid values disable auto-delete.
+    """
+    if message is None:
+        return
+
+    from database import get_setting
+
+    try:
+        if delay is None:
+            raw = await get_setting("auto_delete", "0")
+            delay = int(raw or 0)
+        else:
+            delay = int(delay)
+    except Exception:
+        delay = 0
+
+    if delay <= 0:
+        return
+
+    async def _delete_later() -> None:
+        try:
+            await asyncio.sleep(delay)
+            await message.delete()
+        except Exception as e:
+            logger.warning("auto_delete failed: %s", e)
+
+    # Fire-and-forget, does not block handler
+    try:
+        asyncio.create_task(_delete_later())
+    except RuntimeError:
+        # If no running loop (edge cases), just skip silently
+        logger.warning("auto_delete could not create task (no running loop)")
 
 
 # ════════════════════════ VALIDATION ════════════════════════
