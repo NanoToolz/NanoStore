@@ -19,23 +19,52 @@ async def safe_edit(
 ) -> None:
     """Safely edit a callback query message.
 
-    Handles common errors:
-    - Message is not modified (same content)
-    - Message to edit not found (deleted)
-    - Message can't be edited (too old / not inline)
+    Works for both plain text messages and media messages with captions.
+    Falls back to sending a new message if the original cannot be edited.
     """
     try:
+        # First try editing as a normal text message
         await query.message.edit_text(
             text=text,
             parse_mode=parse_mode,
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
+        return
     except Exception as e:
         error_msg = str(e).lower()
+
+        # If there is no text (photo/document message), try editing caption instead
+        if "there is no text in the message to edit" in error_msg:
+            try:
+                await query.message.edit_caption(
+                    caption=text,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+                return
+            except Exception as e2:
+                error_msg2 = str(e2).lower()
+                if "message is not modified" in error_msg2:
+                    return
+                if "message to edit not found" in error_msg2 or "message can't be edited" in error_msg2:
+                    try:
+                        await query.message.chat.send_message(
+                            text=text,
+                            parse_mode=parse_mode,
+                            reply_markup=reply_markup,
+                            disable_web_page_preview=True,
+                        )
+                    except Exception as send_err:
+                        logger.warning("Failed to send replacement message after caption edit failure: %s", send_err)
+                    return
+                logger.warning("safe_edit caption failed: %s", e2)
+                return
+
+        # Original text edit cases
         if "message is not modified" in error_msg:
             return
-        if "message to edit not found" in error_msg:
+        if "message to edit not found" in error_msg or "message can't be edited" in error_msg:
             try:
                 await query.message.chat.send_message(
                     text=text,
@@ -46,17 +75,7 @@ async def safe_edit(
             except Exception as send_err:
                 logger.warning("Failed to send replacement message: %s", send_err)
             return
-        if "message can't be edited" in error_msg:
-            try:
-                await query.message.chat.send_message(
-                    text=text,
-                    parse_mode=parse_mode,
-                    reply_markup=reply_markup,
-                    disable_web_page_preview=True,
-                )
-            except Exception as send_err:
-                logger.warning("Failed to send replacement message: %s", send_err)
-            return
+
         logger.warning("safe_edit failed: %s", e)
 
 
@@ -93,7 +112,7 @@ async def check_force_join(bot, user_id: int) -> list:
 def html_escape(text: str) -> str:
     """Escape HTML special characters for Telegram."""
     if not text:
-        return ""
+        return ""}
     return escape(str(text))
 
 
