@@ -514,15 +514,20 @@ def admin_fj_kb(channels: list) -> InlineKeyboardMarkup:
 
 # ---- Admin: Settings ----
 
-def admin_settings_kb(settings: list) -> InlineKeyboardMarkup:
-    """Admin settings list."""
-    rows = []
-    for s in settings:
-        key = s["key"]
-        value = s.get("value", "")
-        display = value[:20] + "..." if len(value) > 20 else value
-        rows.append([Btn(f"⚙️ {key}: {display}", callback_data=f"adm_set:{key}")])
-    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
+def admin_settings_kb() -> InlineKeyboardMarkup:
+    """Static admin settings keyboard matching admin_set_handler keys."""
+    rows = [
+        [Btn("🏪 Store Name", callback_data="adm_set:bot_name")],
+        [Btn("💰 Currency", callback_data="adm_set:currency")],
+        [Btn("👋 Welcome Text", callback_data="adm_set:welcome_text")],
+        [Btn("🛒 Minimum Order", callback_data="adm_set:min_order")],
+        [Btn("🎁 Daily Reward", callback_data="adm_set:daily_reward")],
+        [Btn("⏱️ Auto-Delete Timer", callback_data="adm_set:auto_delete")],
+        [Btn("🔧 Maintenance On/Off", callback_data="adm_set:maintenance")],
+        [Btn("📝 Maintenance Text", callback_data="adm_set:maintenance_text")],
+        [Btn("💳 Payment Instructions", callback_data="adm_set:payment_instructions")],
+        [Btn("◀️ Admin Panel", callback_data="admin")],
+    ]
     return InlineKeyboardMarkup(rows)
 
 
