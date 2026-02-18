@@ -4,8 +4,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
-from database import add_user, is_banned, get_setting, get_cart_count, add_action_log
-from helpers import safe_edit, check_force_join, log_action, html_escape, format_price, separator
+from database import ensure_user, is_user_banned, get_setting, get_cart_count, add_action_log
+from helpers import safe_edit, check_force_join, log_action, html_escape, separator
 from keyboards import main_menu_kb, back_kb, force_join_kb
 
 logger = logging.getLogger(__name__)
@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command — register user, check force join, show welcome."""
     user = update.effective_user
-    await add_user(user.id, user.username or "", user.first_name or "User")
+    await ensure_user(user.id, user.first_name or "User", user.username or "")
 
-    if await is_banned(user.id):
+    if await is_user_banned(user.id):
         await update.message.reply_text(
             "⛔ <b>Access Denied</b>\n\n"
             "You have been banned from this store.\n"
@@ -49,11 +49,9 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Send welcome message with optional image."""
     user = update.effective_user
     is_admin = user.id == ADMIN_ID
-    cart_count = await get_cart_count(user.id)
-    store_name = await get_setting("store_name", "NanoStore")
+    store_name = await get_setting("bot_name", "NanoStore")
 
-    # Custom welcome message or default
-    custom_msg = await get_setting("welcome_message", "")
+    custom_msg = await get_setting("welcome_text", "")
     if custom_msg:
         text = custom_msg
     else:
@@ -64,9 +62,8 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "👇 Choose an option below:"
         )
 
-    kb = main_menu_kb(is_admin=is_admin, cart_count=cart_count)
+    kb = main_menu_kb(is_admin=is_admin)
 
-    # Try welcome image from settings (Telegram file_id)
     welcome_image = await get_setting("welcome_image", "")
     if welcome_image:
         try:
@@ -80,7 +77,6 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         except Exception as e:
             logger.warning("Welcome image failed: %s", e)
 
-    # Fallback: text only
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -91,10 +87,8 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     user = update.effective_user
     is_admin = user.id == ADMIN_ID
-    cart_count = await get_cart_count(user.id)
-    store_name = await get_setting("store_name", "NanoStore")
+    store_name = await get_setting("bot_name", "NanoStore")
 
-    # Clear any pending state
     context.user_data.pop("state", None)
     context.user_data.pop("temp", None)
 
@@ -103,7 +97,7 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"Welcome back, {html_escape(user.first_name)}!"
     )
 
-    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count))
+    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -111,8 +105,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     query = update.callback_query
     await query.answer()
 
-    store_name = await get_setting("store_name", "NanoStore")
-    contact = await get_setting("contact", "@NanoToolz")
+    store_name = await get_setting("bot_name", "NanoStore")
 
     text = (
         f"ℹ️ <b>{html_escape(store_name)} — Help</b>\n"
@@ -121,9 +114,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🔍 <b>Search</b> — Find products by keyword\n"
         "🛒 <b>Cart</b> — View & manage your cart\n"
         "📦 <b>Orders</b> — Track your order history\n"
-        "🎁 <b>Daily Reward</b> — Claim free balance daily\n"
-        "🎫 <b>Support</b> — Create support tickets\n\n"
-        f"📞 Contact: {html_escape(contact)}"
+        "🎫 <b>Support</b> — Create support tickets\n"
     )
 
     await safe_edit(query, text, reply_markup=back_kb("main_menu"))
@@ -135,7 +126,7 @@ async def noop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def verify_join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Verify that user has joined all required channels after force join screen."""
+    """Verify that user has joined all required channels."""
     query = update.callback_query
     await query.answer()
 
@@ -151,10 +142,8 @@ async def verify_join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await safe_edit(query, text, reply_markup=force_join_kb(not_joined))
         return
 
-    # Passed — show main menu
     is_admin = user.id == ADMIN_ID
-    cart_count = await get_cart_count(user.id)
-    store_name = await get_setting("store_name", "NanoStore")
+    store_name = await get_setting("bot_name", "NanoStore")
 
     text = (
         f"✅ <b>Verified!</b>\n\n"
@@ -162,4 +151,4 @@ async def verify_join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         "👇 Choose an option below:"
     )
 
-    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count))
+    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))

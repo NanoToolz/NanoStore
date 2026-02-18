@@ -1,4 +1,4 @@
-"""NanoStore helper utilities — safe_edit, formatting, logging, etc."""
+"""NanoStore helper utilities — safe_edit, formatting, logging, force join, etc."""
 
 import logging
 from html import escape
@@ -33,10 +33,8 @@ async def safe_edit(
     except Exception as e:
         error_msg = str(e).lower()
         if "message is not modified" in error_msg:
-            # Same content, ignore silently
             return
         if "message to edit not found" in error_msg:
-            # Message was deleted, try sending new one
             try:
                 await query.message.chat.send_message(
                     text=text,
@@ -48,7 +46,6 @@ async def safe_edit(
                 logger.warning("Failed to send replacement message: %s", send_err)
             return
         if "message can't be edited" in error_msg:
-            # Try sending new message instead
             try:
                 await query.message.chat.send_message(
                     text=text,
@@ -59,8 +56,35 @@ async def safe_edit(
             except Exception as send_err:
                 logger.warning("Failed to send replacement message: %s", send_err)
             return
-        # Some other error
         logger.warning("safe_edit failed: %s", e)
+
+
+# ════════════════════════ FORCE JOIN ════════════════════════
+
+async def check_force_join(bot, user_id: int) -> list:
+    """Check if user has joined all required channels.
+
+    Returns list of channels NOT joined (empty = all good).
+    """
+    from database import get_force_join_channels
+
+    channels = await get_force_join_channels()
+    if not channels:
+        return []
+
+    not_joined = []
+    for ch in channels:
+        try:
+            member = await bot.get_chat_member(
+                chat_id=ch["channel_id"], user_id=user_id
+            )
+            if member.status in ("left", "kicked"):
+                not_joined.append(ch)
+        except Exception:
+            # Can't check = assume not joined
+            not_joined.append(ch)
+
+    return not_joined
 
 
 # ════════════════════════ FORMATTING ════════════════════════
@@ -96,7 +120,6 @@ def format_stock(stock: int) -> str:
 def status_emoji(status: str) -> str:
     """Get emoji for order/payment status."""
     emojis = {
-        # Order statuses
         "pending": "⏳",
         "confirmed": "✅",
         "processing": "⚙️",
@@ -104,16 +127,13 @@ def status_emoji(status: str) -> str:
         "delivered": "📦",
         "completed": "✅",
         "cancelled": "❌",
-        # Payment statuses
         "unpaid": "💰",
         "paid": "✅",
         "pending_review": "⏳",
         "rejected": "❌",
         "refunded": "🔄",
-        # Ticket statuses
         "open": "🟢",
         "closed": "🔴",
-        # Proof statuses
         "approved": "✅",
     }
     return emojis.get(status, "📌")
