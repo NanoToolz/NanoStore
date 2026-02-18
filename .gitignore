@@ -1,8 +1,29 @@
+# Database
+nanostore.db
+store.db
+*.db
+
+# Environment
 .env
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.db
-venv/
-.venv/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Assets (optional local files)
 assets/
