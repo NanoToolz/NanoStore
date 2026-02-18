@@ -1,12 +1,12 @@
 import json
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import (
     get_cart, get_cart_total, clear_cart, create_order,
     get_user_orders, get_order, validate_coupon, use_coupon,
     is_banned
 )
-from keyboards import checkout_kb, order_detail_kb, back_kb, empty_cart_kb
+from keyboards import checkout_kb, order_detail_kb, back_kb, back_btn, empty_cart_kb
 
 
 async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -30,9 +30,7 @@ async def checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if coupon_code and discount > 0:
         discount_amount = total * (discount / 100)
         final_total = total - discount_amount
-        text = (
-            "\ud83d\udcb3 *Order Summary*\n\n"
-        )
+        text = "\ud83d\udcb3 *Order Summary*\n\n"
         for item in items:
             sub = item["price"] * item["quantity"]
             text += f"\u2022 {item['name']} x{item['quantity']} = ${sub:.2f}\n"
@@ -107,7 +105,6 @@ async def my_orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = "\ud83d\udce6 *Your Orders:*\n\n"
-    from keyboards import InlineKeyboardButton, InlineKeyboardMarkup, back_btn
     buttons = []
     status_emoji = {
         "pending": "\ud83d\udfe1", "confirmed": "\ud83d\udfe2", "processing": "\ud83d\udd35",

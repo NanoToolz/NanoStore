@@ -2,8 +2,8 @@ import os
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
-from database import add_user, is_banned
-from keyboards import main_menu_kb
+from database import add_user, is_banned, get_setting
+from keyboards import main_menu_kb, back_kb
 
 
 WELCOME_IMAGE = "assets/welcome.jpg"
@@ -14,7 +14,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await add_user(user.id, user.username, user.first_name)
 
     if await is_banned(user.id):
-        await update.message.reply_text("\u26d4 You have been banned from this store.")
+        await update.message.reply_text(
+            "\u26d4 You have been banned from this store.\n"
+            "Contact admin if you think this is a mistake."
+        )
         return
 
     is_admin = user.id == ADMIN_ID
@@ -27,6 +30,19 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     kb = main_menu_kb(is_admin)
 
+    # Priority 1: Check database for Telegram file_id (set via Admin Panel)
+    welcome_file_id = await get_setting("welcome_image")
+    if welcome_file_id:
+        try:
+            await update.message.reply_photo(
+                photo=welcome_file_id, caption=text,
+                parse_mode="Markdown", reply_markup=kb
+            )
+            return
+        except Exception:
+            pass  # file_id invalid/expired, fallback below
+
+    # Priority 2: Local file fallback
     if os.path.exists(WELCOME_IMAGE):
         with open(WELCOME_IMAGE, "rb") as photo:
             await update.message.reply_photo(
@@ -62,7 +78,6 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\ud83d\udce6 *Orders* \u2014 Track your order history\n\n"
         "Need help? Contact admin directly."
     )
-    from keyboards import back_kb
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=back_kb("main_menu"))
 
 

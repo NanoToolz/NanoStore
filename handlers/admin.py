@@ -16,7 +16,7 @@ from keyboards import (
     admin_kb, admin_cats_kb, admin_cat_detail_kb, admin_prods_kb,
     admin_prod_detail_kb, admin_orders_kb, admin_order_detail_kb,
     admin_users_kb, admin_user_detail_kb, admin_coupons_kb,
-    admin_coupon_detail_kb, back_kb, back_btn
+    admin_coupon_detail_kb, back_kb, back_btn, confirm_kb
 )
 
 
@@ -24,14 +24,21 @@ from keyboards import (
 
 _rate_limit_store = {}
 RATE_LIMIT_SECONDS = 1.0  # Min seconds between button presses per user
+MAX_RATE_ENTRIES = 1000    # Prevent memory leak
 
 
 def rate_limited(func):
-    """Prevent button spam — ignores clicks faster than RATE_LIMIT_SECONDS."""
+    """Prevent button spam \u2014 ignores clicks faster than RATE_LIMIT_SECONDS."""
     @functools.wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         now = time.monotonic()
+        # Cleanup stale entries to prevent memory leak
+        if len(_rate_limit_store) > MAX_RATE_ENTRIES:
+            cutoff = now - 60
+            stale = [k for k, v in _rate_limit_store.items() if v < cutoff]
+            for k in stale:
+                del _rate_limit_store[k]
         last = _rate_limit_store.get(user_id, 0)
         if now - last < RATE_LIMIT_SECONDS:
             if update.callback_query:
@@ -139,8 +146,24 @@ async def admin_editcat_handler(update: Update, context: ContextTypes.DEFAULT_TY
 @rate_limited
 async def admin_delcat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     cat_id = int(query.data.replace("adm_delcat_", ""))
+    cat = await get_category(cat_id)
+    cat_name = cat['name'] if cat else 'Unknown'
+    # Confirm before delete
+    await query.answer()
+    await query.edit_message_text(
+        f"\u26a0\ufe0f *Delete Category?*\n\n"
+        f"Are you sure you want to delete *{cat_name}*?\n"
+        f"All products in this category will also be deleted!",
+        parse_mode="Markdown",
+        reply_markup=confirm_kb(f"adm_confirmdelcat_{cat_id}", "adm_cats")
+    )
+
+@admin_only
+@rate_limited
+async def admin_confirmdelcat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    cat_id = int(query.data.replace("adm_confirmdelcat_", ""))
     await delete_category(cat_id)
     await query.answer("\ud83d\uddd1\ufe0f Category deleted!", show_alert=True)
     cats = await get_categories()
@@ -234,6 +257,21 @@ async def admin_editprod_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def admin_delprod_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     prod_id = int(query.data.replace("adm_delprod_", ""))
+    p = await get_product(prod_id)
+    prod_name = p['name'] if p else 'Unknown'
+    await query.answer()
+    await query.edit_message_text(
+        f"\u26a0\ufe0f *Delete Product?*\n\n"
+        f"Are you sure you want to delete *{prod_name}*?",
+        parse_mode="Markdown",
+        reply_markup=confirm_kb(f"adm_confirmdelprod_{prod_id}", "adm_prods")
+    )
+
+@admin_only
+@rate_limited
+async def admin_confirmdelprod_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    prod_id = int(query.data.replace("adm_confirmdelprod_", ""))
     await delete_product(prod_id)
     await query.answer("\ud83d\uddd1\ufe0f Product deleted!", show_alert=True)
     prods = await get_all_products()
@@ -512,7 +550,7 @@ async def admin_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return True
         emoji, name = parts[0], parts[1]
         await update_category(cat_id, name, emoji)
-        await update.message.reply_text(f"\u2705 Category updated!", reply_markup=back_kb("adm_cats"))
+        await update.message.reply_text("\u2705 Category updated!", reply_markup=back_kb("adm_cats"))
         return True
 
     elif action == "addprod":
