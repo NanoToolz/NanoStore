@@ -1,7 +1,8 @@
-# Environment
 .env
 __pycache__/
 *.pyc
 *.pyo
+*.db
 venv/
 .venv/
+assets/
