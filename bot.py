@@ -32,6 +32,13 @@ from handlers.catalog import (
     product_media_handler,
     add_to_cart_handler,
 )
+from handlers.cart import (
+    cart_handler,
+    cart_inc_handler,
+    cart_dec_handler,
+    cart_del_handler,
+    cart_clear_handler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +58,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     tb_text = "".join(tb_string)
 
-    # Notify user if possible
     if isinstance(update, Update):
         if update.callback_query:
             try:
@@ -68,7 +74,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             except Exception:
                 pass
 
-    # Send error to log channel if configured
     if LOG_CHANNEL_ID:
         error_text = (
             f"🚨 <b>Error Report</b>\n\n"
@@ -98,7 +103,7 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(noop_handler, pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(verify_join_handler, pattern=r"^verify_join$"))
 
-    # Catalog: specific patterns BEFORE general
+    # Catalog
     app.add_handler(CallbackQueryHandler(shop_handler, pattern=r"^shop$"))
     app.add_handler(CallbackQueryHandler(category_page_handler, pattern=r"^cat:\d+:p:\d+$"))
     app.add_handler(CallbackQueryHandler(category_handler, pattern=r"^cat:\d+$"))
@@ -106,6 +111,13 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(product_media_handler, pattern=r"^prod_media:\d+:\w+$"))
     app.add_handler(CallbackQueryHandler(product_detail_handler, pattern=r"^prod:\d+$"))
     app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern=r"^add:\d+$"))
+
+    # Cart
+    app.add_handler(CallbackQueryHandler(cart_handler, pattern=r"^cart$"))
+    app.add_handler(CallbackQueryHandler(cart_inc_handler, pattern=r"^cart_inc:\d+$"))
+    app.add_handler(CallbackQueryHandler(cart_dec_handler, pattern=r"^cart_dec:\d+$"))
+    app.add_handler(CallbackQueryHandler(cart_del_handler, pattern=r"^cart_del:\d+$"))
+    app.add_handler(CallbackQueryHandler(cart_clear_handler, pattern=r"^cart_clear$"))
 
     # ---- ERROR HANDLER ----
     app.add_error_handler(error_handler)
@@ -115,7 +127,6 @@ def register_handlers(app: Application) -> None:
 
 def main() -> None:
     """Start the bot."""
-    # Configure logging
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
