@@ -102,6 +102,7 @@ from handlers.admin import (
     admin_proof_post_handler,
     admin_settings_handler,
     admin_set_handler,
+    admin_welcome_image_handler,
     admin_fj_handler,
     admin_fj_add_handler,
     admin_fj_del_handler,
@@ -333,6 +334,7 @@ def register_handlers(app: Application) -> None:
     # ---- Admin: Settings ----
     app.add_handler(CallbackQueryHandler(admin_settings_handler, pattern=r"^adm_settings$"))
     app.add_handler(CallbackQueryHandler(admin_set_handler, pattern=r"^adm_set:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_welcome_image_handler, pattern=r"^adm_welcome_image$"))
 
     # ---- Admin: Force Join ----
     app.add_handler(CallbackQueryHandler(admin_fj_handler, pattern=r"^adm_fj$"))
@@ -345,7 +347,7 @@ def register_handlers(app: Application) -> None:
 
     # ---- Admin: Broadcast ----
     app.add_handler(CallbackQueryHandler(admin_broadcast_handler, pattern=r"^adm_broadcast$"))
-    app.add_handler(CallbackQueryHandler(admin_broadcast_confirm_handler, pattern=r"^adm_broadcast_go$"))
+    app.add_handler(CallbackQueryHandler(admin_broadcast_confirm_handler, pattern=r"^adm_broadcast_go"))
 
     # ---- Admin: Tickets ----
     app.add_handler(CallbackQueryHandler(admin_tickets_handler, pattern=r"^adm_tickets$"))
