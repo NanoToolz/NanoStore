@@ -1,4 +1,6 @@
 import json
+import time
+import functools
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
@@ -7,7 +9,7 @@ from database import (
     update_category, delete_category, get_all_products, get_product,
     add_product, update_product_field, delete_product, get_all_orders,
     get_order, update_order_status, get_all_users, get_user, ban_user,
-    unban_user, get_all_coupons, create_coupon, delete_coupon,
+    unban_user, get_all_coupons, get_coupon, create_coupon, delete_coupon,
     get_setting, set_setting
 )
 from keyboards import (
@@ -18,7 +20,31 @@ from keyboards import (
 )
 
 
+# ==================== RATE LIMITER ====================
+
+_rate_limit_store = {}
+RATE_LIMIT_SECONDS = 1.0  # Min seconds between button presses per user
+
+
+def rate_limited(func):
+    """Prevent button spam — ignores clicks faster than RATE_LIMIT_SECONDS."""
+    @functools.wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        now = time.monotonic()
+        last = _rate_limit_store.get(user_id, 0)
+        if now - last < RATE_LIMIT_SECONDS:
+            if update.callback_query:
+                await update.callback_query.answer("\u23f3 Too fast! Please wait...", show_alert=False)
+            return
+        _rate_limit_store[user_id] = now
+        return await func(update, context)
+    return wrapper
+
+
 def admin_only(func):
+    """Restrict handler to ADMIN_ID only."""
+    @functools.wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_user.id != ADMIN_ID:
             if update.callback_query:
@@ -31,6 +57,7 @@ def admin_only(func):
 # ==================== ADMIN PANEL ====================
 
 @admin_only
+@rate_limited
 async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -43,6 +70,7 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== DASHBOARD ====================
 
 @admin_only
+@rate_limited
 async def admin_dash_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -60,6 +88,7 @@ async def admin_dash_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ==================== CATEGORIES ====================
 
 @admin_only
+@rate_limited
 async def admin_cats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -70,6 +99,7 @@ async def admin_cats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 @admin_only
+@rate_limited
 async def admin_cat_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -82,6 +112,7 @@ async def admin_cat_detail_handler(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=admin_cat_detail_kb(cat_id))
 
 @admin_only
+@rate_limited
 async def admin_addcat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -92,6 +123,7 @@ async def admin_addcat_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 @admin_only
+@rate_limited
 async def admin_editcat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -104,6 +136,7 @@ async def admin_editcat_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 @admin_only
+@rate_limited
 async def admin_delcat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -120,6 +153,7 @@ async def admin_delcat_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 # ==================== PRODUCTS ====================
 
 @admin_only
+@rate_limited
 async def admin_prods_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -130,6 +164,7 @@ async def admin_prods_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 @admin_only
+@rate_limited
 async def admin_prod_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -151,6 +186,7 @@ async def admin_prod_detail_handler(update: Update, context: ContextTypes.DEFAUL
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=admin_prod_detail_kb(prod_id))
 
 @admin_only
+@rate_limited
 async def admin_addprod_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -171,6 +207,7 @@ async def admin_addprod_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 @admin_only
+@rate_limited
 async def admin_editprod_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -193,6 +230,7 @@ async def admin_editprod_handler(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 @admin_only
+@rate_limited
 async def admin_delprod_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     prod_id = int(query.data.replace("adm_delprod_", ""))
@@ -208,6 +246,7 @@ async def admin_delprod_handler(update: Update, context: ContextTypes.DEFAULT_TY
 # ==================== ORDERS ====================
 
 @admin_only
+@rate_limited
 async def admin_orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -221,6 +260,7 @@ async def admin_orders_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 @admin_only
+@rate_limited
 async def admin_order_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -243,6 +283,7 @@ async def admin_order_detail_handler(update: Update, context: ContextTypes.DEFAU
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=admin_order_detail_kb(order_id))
 
 @admin_only
+@rate_limited
 async def admin_setstatus_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     parts = query.data.replace("adm_setstatus_", "").split("_")
@@ -268,6 +309,7 @@ async def admin_setstatus_handler(update: Update, context: ContextTypes.DEFAULT_
 # ==================== USERS ====================
 
 @admin_only
+@rate_limited
 async def admin_users_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -281,6 +323,7 @@ async def admin_users_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 @admin_only
+@rate_limited
 async def admin_user_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -304,6 +347,7 @@ async def admin_user_detail_handler(update: Update, context: ContextTypes.DEFAUL
     )
 
 @admin_only
+@rate_limited
 async def admin_ban_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = int(query.data.replace("adm_ban_", ""))
@@ -319,6 +363,7 @@ async def admin_ban_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=admin_user_detail_kb(uid, True))
 
 @admin_only
+@rate_limited
 async def admin_unban_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = int(query.data.replace("adm_unban_", ""))
@@ -337,6 +382,7 @@ async def admin_unban_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ==================== BROADCAST ====================
 
 @admin_only
+@rate_limited
 async def admin_broadcast_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -351,6 +397,7 @@ async def admin_broadcast_handler(update: Update, context: ContextTypes.DEFAULT_
 # ==================== COUPONS ====================
 
 @admin_only
+@rate_limited
 async def admin_coupons_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -361,11 +408,11 @@ async def admin_coupons_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 @admin_only
+@rate_limited
 async def admin_coupon_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     code = query.data.replace("adm_coupon_", "")
-    from database import get_coupon
     coupon = await get_coupon(code)
     if not coupon:
         await query.edit_message_text("Coupon not found.", reply_markup=back_kb("adm_coupons"))
@@ -380,6 +427,7 @@ async def admin_coupon_detail_handler(update: Update, context: ContextTypes.DEFA
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=admin_coupon_detail_kb(code))
 
 @admin_only
+@rate_limited
 async def admin_addcoupon_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -392,6 +440,7 @@ async def admin_addcoupon_handler(update: Update, context: ContextTypes.DEFAULT_
     )
 
 @admin_only
+@rate_limited
 async def admin_delcoupon_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     code = query.data.replace("adm_delcoupon_", "")
@@ -407,6 +456,7 @@ async def admin_delcoupon_handler(update: Update, context: ContextTypes.DEFAULT_
 # ==================== SETTINGS ====================
 
 @admin_only
+@rate_limited
 async def admin_settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -421,6 +471,7 @@ async def admin_settings_handler(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 @admin_only
+@rate_limited
 async def admin_set_welcome_img_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
