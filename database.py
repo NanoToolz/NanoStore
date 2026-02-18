@@ -229,6 +229,16 @@ async def get_all_users(limit: int = 20) -> list:
     return _rows_to_list(await cur.fetchall())
 
 
+async def get_all_user_ids() -> list[int]:
+    """Return IDs of all non-banned users for broadcast, etc."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT user_id FROM users WHERE banned = 0 ORDER BY joined_at DESC"
+    )
+    rows = await cur.fetchall()
+    return [row["user_id"] for row in rows]
+
+
 async def get_user_count() -> int:
     db = await get_db()
     cur = await db.execute("SELECT COUNT(*) as cnt FROM users")
