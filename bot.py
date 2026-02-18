@@ -23,6 +23,15 @@ from handlers.start import (
     noop_handler,
     verify_join_handler,
 )
+from handlers.catalog import (
+    shop_handler,
+    category_page_handler,
+    category_handler,
+    product_detail_handler,
+    product_faq_handler,
+    product_media_handler,
+    add_to_cart_handler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +97,15 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(help_handler, pattern=r"^help$"))
     app.add_handler(CallbackQueryHandler(noop_handler, pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(verify_join_handler, pattern=r"^verify_join$"))
+
+    # Catalog: specific patterns BEFORE general
+    app.add_handler(CallbackQueryHandler(shop_handler, pattern=r"^shop$"))
+    app.add_handler(CallbackQueryHandler(category_page_handler, pattern=r"^cat:\d+:p:\d+$"))
+    app.add_handler(CallbackQueryHandler(category_handler, pattern=r"^cat:\d+$"))
+    app.add_handler(CallbackQueryHandler(product_faq_handler, pattern=r"^prod_faq:\d+$"))
+    app.add_handler(CallbackQueryHandler(product_media_handler, pattern=r"^prod_media:\d+:\w+$"))
+    app.add_handler(CallbackQueryHandler(product_detail_handler, pattern=r"^prod:\d+$"))
+    app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern=r"^add:\d+$"))
 
     # ---- ERROR HANDLER ----
     app.add_error_handler(error_handler)
