@@ -1,85 +1,206 @@
-"""Helper utilities for NanoStore Bot."""
+"""NanoStore helpers — safe_edit, force join check, logging, formatting."""
 
-from telegram.error import BadRequest
 import logging
+from html import escape
+from telegram import Bot
+from telegram.error import BadRequest, Forbidden
+from config import LOG_CHANNEL_ID
+from database import get_force_join_channels, get_setting
 
 logger = logging.getLogger(__name__)
 
 
-async def safe_edit(query, text, **kwargs):
-    """Safely edit a message, handling photo messages, parse errors, and unchanged content.
-    
-    Priority:
-    1. Try edit_message_text (works for text messages)
-    2. Try edit_message_caption (works for photo/media messages)
-    3. Delete old message and send new one (final fallback)
-    
-    Also handles:
-    - ParseMode errors (retries without parse_mode)
-    - 'Message is not modified' errors (silently ignored)
+# ════════════════════════ SAFE EDIT ════════════════════════
+
+async def safe_edit(query, text: str, reply_markup=None, parse_mode: str = "HTML"):
+    """Safely edit a callback query message.
+
+    Handles all common Telegram edit errors:
+    1. Try edit_message_text (normal text messages)
+    2. Try edit_message_caption (photo/media messages)
+    3. Delete old + send new (final fallback)
+    Also catches parse errors and 'message not modified'.
     """
     # Attempt 1: edit_message_text
     try:
-        return await query.edit_message_text(text, **kwargs)
+        return await query.edit_message_text(
+            text=text, parse_mode=parse_mode, reply_markup=reply_markup
+        )
     except BadRequest as e:
-        error_msg = str(e).lower()
-        
-        # Message is not modified — no changes needed
-        if "message is not modified" in error_msg:
+        err = str(e).lower()
+
+        if "message is not modified" in err:
             return None
-        
-        # Can't parse entities — retry without parse_mode
-        if "can't parse entities" in error_msg:
-            kwargs_no_parse = {k: v for k, v in kwargs.items() if k != "parse_mode"}
+
+        if "can't parse entities" in err:
             try:
-                return await query.edit_message_text(text, **kwargs_no_parse)
-            except BadRequest:
+                return await query.edit_message_text(
+                    text=text, reply_markup=reply_markup
+                )
+            except Exception:
                 pass
-        
-        # No text in message (it's a photo/media message) — try caption
-        if "there is no text in the message" in error_msg or "message can't be edited" in error_msg:
-            pass  # Fall through to Attempt 2
+
+        if "there is no text in the message" in err or "message can't be edited" in err:
+            pass  # fall through to attempt 2
         else:
-            # Unknown BadRequest, still try caption
-            logger.warning(f"safe_edit: edit_message_text failed: {e}")
+            logger.warning("safe_edit edit_text failed: %s", e)
     except Exception as e:
-        logger.warning(f"safe_edit: edit_message_text unexpected error: {e}")
+        logger.warning("safe_edit edit_text unexpected: %s", e)
 
-    # Attempt 2: edit_message_caption (for photo messages)
+    # Attempt 2: edit_message_caption (photo/media messages)
     try:
-        return await query.edit_message_caption(caption=text, **kwargs)
+        return await query.edit_message_caption(
+            caption=text, parse_mode=parse_mode, reply_markup=reply_markup
+        )
     except BadRequest as e:
-        error_msg = str(e).lower()
-        
-        if "message is not modified" in error_msg:
-            return None
-        
-        if "can't parse entities" in error_msg:
-            kwargs_no_parse = {k: v for k, v in kwargs.items() if k != "parse_mode"}
-            try:
-                return await query.edit_message_caption(caption=text, **kwargs_no_parse)
-            except BadRequest:
-                pass
-        
-        logger.warning(f"safe_edit: edit_message_caption failed: {e}")
-    except Exception as e:
-        logger.warning(f"safe_edit: edit_message_caption unexpected error: {e}")
+        err = str(e).lower()
 
-    # Attempt 3: Delete old message and send a new one
+        if "message is not modified" in err:
+            return None
+
+        if "can't parse entities" in err:
+            try:
+                return await query.edit_message_caption(
+                    caption=text, reply_markup=reply_markup
+                )
+            except Exception:
+                pass
+
+        logger.warning("safe_edit edit_caption failed: %s", e)
+    except Exception as e:
+        logger.warning("safe_edit edit_caption unexpected: %s", e)
+
+    # Attempt 3: delete old message + send new one
     try:
         chat = query.message.chat
         try:
             await query.message.delete()
         except Exception:
-            pass  # Message might already be deleted
-        
+            pass
+
         try:
-            return await chat.send_message(text, **kwargs)
+            return await chat.send_message(
+                text=text, parse_mode=parse_mode, reply_markup=reply_markup
+            )
         except BadRequest as e:
             if "can't parse entities" in str(e).lower():
-                kwargs_no_parse = {k: v for k, v in kwargs.items() if k != "parse_mode"}
-                return await chat.send_message(text, **kwargs_no_parse)
+                return await chat.send_message(
+                    text=text, reply_markup=reply_markup
+                )
             raise
     except Exception as e:
-        logger.error(f"safe_edit: all attempts failed: {e}")
+        logger.error("safe_edit all attempts failed: %s", e)
         return None
+
+
+# ════════════════════════ FORCE JOIN ════════════════════════
+
+async def check_force_join(bot: Bot, user_id: int) -> list[dict]:
+    """Check if user has joined all required channels.
+
+    Returns list of channels the user has NOT joined.
+    Empty list means user has joined all (or no channels configured).
+    """
+    channels = await get_force_join_channels()
+    if not channels:
+        return []
+
+    not_joined = []
+    for ch in channels:
+        try:
+            member = await bot.get_chat_member(
+                chat_id=ch["channel_id"], user_id=user_id
+            )
+            if member.status in ("left", "kicked"):
+                not_joined.append(ch)
+        except Forbidden:
+            logger.warning(
+                "Bot not admin in channel %s (%s) — skipping force join check",
+                ch["channel_name"], ch["channel_id"]
+            )
+        except Exception as e:
+            logger.warning(
+                "Force join check failed for channel %s: %s",
+                ch["channel_id"], e
+            )
+            not_joined.append(ch)
+
+    return not_joined
+
+
+# ════════════════════════ ACTION LOGGING ════════════════════════
+
+async def log_action(bot: Bot, text: str) -> None:
+    """Send a log message to the LOG_CHANNEL_ID (if configured).
+
+    Also logs to Python logger regardless.
+    """
+    logger.info("ACTION: %s", text)
+
+    if not LOG_CHANNEL_ID:
+        return
+
+    try:
+        await bot.send_message(
+            chat_id=LOG_CHANNEL_ID,
+            text=f"📝 <b>Log</b>\n\n{text}",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.warning("Failed to send log to channel: %s", e)
+
+
+# ════════════════════════ FORMATTING ════════════════════════
+
+async def format_price(amount: float) -> str:
+    """Format a price with the dynamic currency from settings.
+
+    Example: 'Rs 1,500.00' or '$ 29.99'
+    """
+    currency = await get_setting("currency", "Rs")
+    if amount == int(amount):
+        formatted = f"{int(amount):,}"
+    else:
+        formatted = f"{amount:,.2f}"
+    return f"{currency} {formatted}"
+
+
+def format_stock(stock: int) -> str:
+    """Format stock display text.
+
+    -1 = unlimited, 0 = out of stock, >0 = X available.
+    """
+    if stock == -1:
+        return "♾️ Unlimited"
+    if stock == 0:
+        return "🔴 Out of Stock"
+    return f"✅ {stock} available"
+
+
+def html_escape(text: str) -> str:
+    """Escape HTML special characters in user input."""
+    return escape(str(text))
+
+
+def status_emoji(status: str) -> str:
+    """Get emoji for order/ticket status."""
+    mapping = {
+        "pending": "🟡",
+        "confirmed": "🟢",
+        "processing": "🔵",
+        "shipped": "📦",
+        "delivered": "✅",
+        "cancelled": "🔴",
+        "paid": "🟢",
+        "unpaid": "🟡",
+        "rejected": "🔴",
+        "approved": "🟢",
+        "open": "🟢",
+        "closed": "⚪",
+    }
+    return mapping.get(status, "⚪")
+
+
+def separator() -> str:
+    """Return a consistent visual separator line."""
+    return "━━━━━━━━━━━━━━━━━━━"
