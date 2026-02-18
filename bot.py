@@ -39,6 +39,10 @@ from handlers.cart import (
     cart_del_handler,
     cart_clear_handler,
 )
+from handlers.search import (
+    search_handler,
+    search_text_handler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +93,35 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.error("Failed to send error to log channel: %s", e)
 
 
+# ---- TEXT / PHOTO ROUTERS ----
+
+async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route plain text messages based on user_data state."""
+    state = context.user_data.get("state")
+    if not state:
+        return
+
+    if state == "search":
+        await search_text_handler(update, context)
+    # Future states handled here:
+    # elif state == "ticket_subject": ...
+    # elif state.startswith("ticket_reply:"): ...
+    # elif state.startswith("adm_"): ...
+
+
+async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route photo messages based on user_data state."""
+    state = context.user_data.get("state")
+    if not state:
+        return
+
+    # Future states handled here:
+    # if state.startswith("proof_upload:"): ...
+    # elif state.startswith("adm_prod_img:"): ...
+    # elif state.startswith("adm_cat_img:"): ...
+    # elif state.startswith("adm_prod_media:"): ...
+
+
 def register_handlers(app: Application) -> None:
     """Register all handlers with correct priority ordering."""
 
@@ -118,6 +151,13 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(cart_dec_handler, pattern=r"^cart_dec:\d+$"))
     app.add_handler(CallbackQueryHandler(cart_del_handler, pattern=r"^cart_del:\d+$"))
     app.add_handler(CallbackQueryHandler(cart_clear_handler, pattern=r"^cart_clear$"))
+
+    # Search
+    app.add_handler(CallbackQueryHandler(search_handler, pattern=r"^search$"))
+
+    # ---- TEXT & PHOTO ROUTERS ----
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_router))
 
     # ---- ERROR HANDLER ----
     app.add_error_handler(error_handler)

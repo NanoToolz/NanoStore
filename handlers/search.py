@@ -1,60 +1,91 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+"""NanoStore search handlers — search prompt + text query + results."""
+
+import logging
+from telegram import Update, InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import search_products, is_banned
-from keyboards import back_kb, back_btn
+from database import search_products, get_setting
+from helpers import safe_edit, html_escape, separator
+from keyboards import back_kb
+
+logger = logging.getLogger(__name__)
+
+MAX_RESULTS: int = 20
 
 
-async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show search prompt and set state."""
     query = update.callback_query
     await query.answer()
 
-    if await is_banned(update.effective_user.id):
-        await query.edit_message_text("\u26d4 You are banned.")
-        return
+    context.user_data["state"] = "search"
 
-    context.user_data["awaiting_search"] = True
-    await query.edit_message_text(
-        "\ud83d\udd0d *Search Products*\n\nType the product name or keyword:",
-        parse_mode="Markdown",
-        reply_markup=back_kb("main_menu")
+    text = (
+        f"🔍 <b>Search Products</b>\n"
+        f"{separator()}\n\n"
+        "📝 Type a product name or keyword to search:\n\n"
+        "<i>Example: template, course, eBook</i>"
     )
+    await safe_edit(query, text, reply_markup=back_kb("main_menu"))
 
 
-async def search_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data.get("awaiting_search"):
-        return False
+async def search_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Process search text query and show results."""
+    context.user_data.pop("state", None)
 
-    context.user_data["awaiting_search"] = False
     query_text = update.message.text.strip()
+    if not query_text:
+        await update.message.reply_text(
+            "⚠️ Please enter a search term.",
+            parse_mode="HTML",
+        )
+        return
 
     if len(query_text) < 2:
         await update.message.reply_text(
-            "\u26a0\ufe0f Search query too short. Try at least 2 characters.",
-            reply_markup=back_kb("search")
+            "⚠️ Search query too short. Please enter at least 2 characters.",
+            parse_mode="HTML",
         )
-        return True
+        return
 
     results = await search_products(query_text)
+    currency = await get_setting("currency", "Rs")
 
     if not results:
-        await update.message.reply_text(
-            f"\ud83d\udd0d No results for '*{query_text}*'.\nTry a different keyword!",
-            parse_mode="Markdown",
-            reply_markup=back_kb("main_menu")
+        text = (
+            f"🔍 <b>Search Results</b>\n"
+            f"{separator()}\n\n"
+            f"🙅 No products found for \"<b>{html_escape(query_text)}</b>\"\n\n"
+            "Try a different keyword."
         )
-        return True
+        kb = InlineKeyboardMarkup([
+            [Btn("🔍 Search Again", callback_data="search")],
+            [Btn("🛍️ Shop", callback_data="shop")],
+            [Btn("◀️ Main Menu", callback_data="main_menu")],
+        ])
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+        return
 
-    buttons = []
-    for p in results[:15]:
-        buttons.append([InlineKeyboardButton(
-            f"{p['name']} \u2014 ${p['price']:.2f}",
-            callback_data=f"prod_{p['id']}"
+    display = results[:MAX_RESULTS]
+    text = (
+        f"🔍 <b>Search Results</b>\n"
+        f"{separator()}\n"
+        f"📦 Found <b>{len(results)}</b> result(s) for \"<b>{html_escape(query_text)}</b>\":"
+    )
+
+    rows = []
+    for p in display:
+        price = int(p["price"]) if p["price"] == int(p["price"]) else p["price"]
+        rows.append([Btn(
+            f"🏷️ {p['name']} — {currency} {price}",
+            callback_data=f"prod:{p['id']}",
         )])
-    buttons.append([back_btn("main_menu")])
+
+    if len(results) > MAX_RESULTS:
+        text += f"\n\n<i>Showing first {MAX_RESULTS} of {len(results)} results.</i>"
+
+    rows.append([Btn("🔍 Search Again", callback_data="search")])
+    rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
 
     await update.message.reply_text(
-        f"\ud83d\udd0d *Results for '{query_text}':*\n\nFound {len(results)} product(s):",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(buttons)
+        text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
     )
-    return True
