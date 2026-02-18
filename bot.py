@@ -61,14 +61,12 @@ from handlers.admin import (
     admin_handler,
     back_admin_handler,
     admin_dashboard_handler,
-    # Categories
     admin_cats_handler,
     admin_cat_add_handler,
     admin_cat_detail_handler,
     admin_cat_edit_handler,
     admin_cat_del_handler,
     admin_cat_img_handler,
-    # Products
     admin_prods_handler,
     admin_prod_add_handler,
     admin_prod_detail_handler,
@@ -80,46 +78,51 @@ from handlers.admin import (
     admin_prod_faq_del_handler,
     admin_prod_media_add_handler,
     admin_prod_media_del_handler,
-    # Orders
     admin_orders_handler,
     admin_order_detail_handler,
     admin_order_status_handler,
-    # Users
     admin_users_handler,
     admin_user_detail_handler,
     admin_ban_handler,
     admin_unban_handler,
-    # Coupons
     admin_coupons_handler,
     admin_coupon_add_handler,
     admin_coupon_toggle_handler,
     admin_coupon_del_handler,
-    # Payments
     admin_payments_handler,
     admin_pay_add_handler,
     admin_pay_del_handler,
-    # Proofs
     admin_proofs_handler,
     admin_proof_detail_handler,
     admin_proof_approve_handler,
     admin_proof_reject_handler,
     admin_proof_post_handler,
-    # Settings
     admin_settings_handler,
     admin_set_handler,
-    # Force Join
     admin_fj_handler,
     admin_fj_add_handler,
     admin_fj_del_handler,
-    # Bulk
     admin_bulk_handler,
     admin_bulk_stock_handler,
-    # Broadcast
     admin_broadcast_handler,
     admin_broadcast_confirm_handler,
-    # Routers
     admin_text_router,
     admin_photo_router,
+)
+from handlers.tickets import (
+    support_handler,
+    ticket_new_handler,
+    ticket_subject_handler,
+    ticket_message_handler,
+    my_tickets_handler,
+    ticket_detail_handler,
+    ticket_reply_prompt_handler,
+    ticket_reply_text_handler,
+    admin_tickets_handler,
+    admin_tickets_all_handler,
+    admin_ticket_detail_handler,
+    admin_ticket_close_handler,
+    admin_ticket_reopen_handler,
 )
 
 logger = logging.getLogger(__name__)
@@ -179,7 +182,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not state:
         return
 
-    # Admin states (adm_ prefix)
+    # Admin states
     if state.startswith("adm_"):
         await admin_text_router(update, context)
         return
@@ -189,9 +192,12 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await search_text_handler(update, context)
     elif state.startswith("apply_coupon:"):
         await coupon_text_handler(update, context)
-    # Future:
-    # elif state == "ticket_subject": ...
-    # elif state.startswith("ticket_reply:"): ...
+    elif state == "ticket_subject":
+        await ticket_subject_handler(update, context)
+    elif state == "ticket_message":
+        await ticket_message_handler(update, context)
+    elif state.startswith("ticket_reply:"):
+        await ticket_reply_text_handler(update, context)
 
 
 async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -208,8 +214,6 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # User states
     if state.startswith("proof_upload:"):
         await proof_upload_handler(update, context)
-    # Future:
-    # elif state.startswith("ticket_attach:"): ...
 
 
 def register_handlers(app: Application) -> None:
@@ -218,7 +222,7 @@ def register_handlers(app: Application) -> None:
     # ════ COMMANDS ════
     app.add_handler(CommandHandler("start", start_handler))
 
-    # ════ CALLBACK QUERIES (most specific patterns first) ════
+    # ════ CALLBACK QUERIES ════
 
     # ---- Start / Menu / Help / Noop ----
     app.add_handler(CallbackQueryHandler(main_menu_handler, pattern=r"^main_menu$"))
@@ -257,6 +261,13 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(orders_page_handler, pattern=r"^orders_p:\d+$"))
     app.add_handler(CallbackQueryHandler(order_detail_handler, pattern=r"^order:\d+$"))
 
+    # ---- Support / Tickets (User) ----
+    app.add_handler(CallbackQueryHandler(support_handler, pattern=r"^support$"))
+    app.add_handler(CallbackQueryHandler(ticket_new_handler, pattern=r"^ticket_new$"))
+    app.add_handler(CallbackQueryHandler(my_tickets_handler, pattern=r"^my_tickets$"))
+    app.add_handler(CallbackQueryHandler(ticket_reply_prompt_handler, pattern=r"^ticket_reply:\d+$"))
+    app.add_handler(CallbackQueryHandler(ticket_detail_handler, pattern=r"^ticket:\d+$"))
+
     # ---- Admin Panel ----
     app.add_handler(CallbackQueryHandler(admin_handler, pattern=r"^admin$"))
     app.add_handler(CallbackQueryHandler(admin_dashboard_handler, pattern=r"^adm_dash$"))
@@ -277,8 +288,8 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(admin_prod_stock_handler, pattern=r"^adm_prod_stock:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_prod_faq_add_handler, pattern=r"^adm_prod_faq_add:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_prod_faq_del_handler, pattern=r"^adm_prod_faq_del:\d+:\d+$"))
-    app.add_handler(CallbackQueryHandler(admin_prod_media_add_handler, pattern=r"^adm_prod_media_add:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_prod_media_add_handler, pattern=r"^adm_prod_media_add:\d+:\w+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_media_add_handler, pattern=r"^adm_prod_media_add:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_prod_media_del_handler, pattern=r"^adm_prod_media_del:\d+:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_prods_handler, pattern=r"^adm_prods:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_prod_detail_handler, pattern=r"^adm_prod:\d+$"))
@@ -328,6 +339,13 @@ def register_handlers(app: Application) -> None:
     # ---- Admin: Broadcast ----
     app.add_handler(CallbackQueryHandler(admin_broadcast_handler, pattern=r"^adm_broadcast$"))
     app.add_handler(CallbackQueryHandler(admin_broadcast_confirm_handler, pattern=r"^adm_broadcast_go$"))
+
+    # ---- Admin: Tickets ----
+    app.add_handler(CallbackQueryHandler(admin_tickets_handler, pattern=r"^adm_tickets$"))
+    app.add_handler(CallbackQueryHandler(admin_tickets_all_handler, pattern=r"^adm_tickets_all$"))
+    app.add_handler(CallbackQueryHandler(admin_ticket_close_handler, pattern=r"^adm_ticket_close:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_ticket_reopen_handler, pattern=r"^adm_ticket_reopen:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_ticket_detail_handler, pattern=r"^adm_ticket:\d+$"))
 
     # ════ TEXT & PHOTO ROUTERS ════
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
