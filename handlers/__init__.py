@@ -1,1 +1,1 @@
-# NanoStore Bot Handlers
+"""NanoStore handlers package."""
