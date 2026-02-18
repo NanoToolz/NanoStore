@@ -56,7 +56,10 @@ async def safe_edit(
                             disable_web_page_preview=True,
                         )
                     except Exception as send_err:
-                        logger.warning("Failed to send replacement message after caption edit failure: %s", send_err)
+                        logger.warning(
+                            "Failed to send replacement message after caption edit failure: %s",
+                            send_err,
+                        )
                     return
                 logger.warning("safe_edit caption failed: %s", e2)
                 return
@@ -112,7 +115,7 @@ async def check_force_join(bot, user_id: int) -> list:
 def html_escape(text: str) -> str:
     """Escape HTML special characters for Telegram."""
     if not text:
-        return ""}
+        return ""
     return escape(str(text))
 
 
@@ -162,7 +165,7 @@ def status_emoji(status: str) -> str:
 def delivery_icon(delivery_type: str) -> str:
     """Emoji icon for delivery type (auto/manual)."""
     mapping = {
-        "auto": "⚡",    # instant / auto delivery
+        "auto": "⚡",  # instant / auto delivery
         "manual": "🕐",  # manual delivery
     }
     return mapping.get(delivery_type, "📦")
@@ -174,7 +177,7 @@ def truncate(text: str, max_len: int = 100) -> str:
         return ""
     if len(text) <= max_len:
         return text
-    return text[:max_len - 3] + "..."
+    return text[: max_len - 3] + "..."
 
 
 # ════════════════════════ LOGGING ════════════════════════
