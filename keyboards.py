@@ -64,7 +64,7 @@ def categories_kb(categories: list) -> InlineKeyboardMarkup:
         row = []
         for cat in categories[i:i + 2]:
             emoji = cat.get("emoji", "📁")
-            row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id']}"))
+            row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id"]}"))
         rows.append(row)
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
     return InlineKeyboardMarkup(rows)
@@ -515,16 +515,23 @@ def admin_fj_kb(channels: list) -> InlineKeyboardMarkup:
 # ---- Admin: Settings ----
 
 def admin_settings_kb() -> InlineKeyboardMarkup:
-    """Static admin settings keyboard matching admin_set_handler keys."""
+    """Admin settings keyboard with mixed row sizes and welcome image option."""
     rows = [
-        [Btn("🏪 Store Name", callback_data="adm_set:bot_name")],
-        [Btn("💰 Currency", callback_data="adm_set:currency")],
+        [
+            Btn("🏪 Store Name", callback_data="adm_set:bot_name"),
+            Btn("💰 Currency", callback_data="adm_set:currency"),
+        ],
         [Btn("👋 Welcome Text", callback_data="adm_set:welcome_text")],
-        [Btn("🛒 Minimum Order", callback_data="adm_set:min_order")],
-        [Btn("🎁 Daily Reward", callback_data="adm_set:daily_reward")],
+        [Btn("🖼️ Welcome Image", callback_data="adm_welcome_image")],
+        [
+            Btn("🛒 Minimum Order", callback_data="adm_set:min_order"),
+            Btn("🎁 Daily Reward", callback_data="adm_set:daily_reward"),
+        ],
         [Btn("⏱️ Auto-Delete Timer", callback_data="adm_set:auto_delete")],
-        [Btn("🔧 Maintenance On/Off", callback_data="adm_set:maintenance")],
-        [Btn("📝 Maintenance Text", callback_data="adm_set:maintenance_text")],
+        [
+            Btn("🔧 Maintenance On/Off", callback_data="adm_set:maintenance"),
+            Btn("📝 Maint. Text", callback_data="adm_set:maintenance_text"),
+        ],
         [Btn("💳 Payment Instructions", callback_data="adm_set:payment_instructions")],
         [Btn("◀️ Admin Panel", callback_data="admin")],
     ]
