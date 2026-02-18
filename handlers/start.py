@@ -64,11 +64,12 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     kb = main_menu_kb(is_admin=is_admin)
 
-    welcome_image = await get_setting("welcome_image", "")
-    if welcome_image:
+    # Prefer new setting key 'welcome_image_id' if present; fall back to legacy 'welcome_image'
+    welcome_image_id = await get_setting("welcome_image_id", "") or await get_setting("welcome_image", "")
+    if welcome_image_id:
         try:
             await update.message.reply_photo(
-                photo=welcome_image,
+                photo=welcome_image_id,
                 caption=text,
                 parse_mode="HTML",
                 reply_markup=kb,
