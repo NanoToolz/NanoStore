@@ -64,7 +64,8 @@ def categories_kb(categories: list) -> InlineKeyboardMarkup:
         row = []
         for cat in categories[i:i + 2]:
             emoji = cat.get("emoji", "📁")
-            row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id"]}"))
+            # FIXED: correct f-string quoting for cat['id']
+            row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id']}"))
         rows.append(row)
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
     return InlineKeyboardMarkup(rows)
