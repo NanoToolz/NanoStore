@@ -17,8 +17,10 @@ from handlers.search import search_handler, search_text_handler
 from handlers.admin import (
     admin_handler, admin_dash_handler, admin_cats_handler,
     admin_cat_detail_handler, admin_addcat_handler, admin_editcat_handler,
-    admin_delcat_handler, admin_prods_handler, admin_prod_detail_handler,
+    admin_delcat_handler, admin_confirmdelcat_handler,
+    admin_prods_handler, admin_prod_detail_handler,
     admin_addprod_handler, admin_editprod_handler, admin_delprod_handler,
+    admin_confirmdelprod_handler,
     admin_orders_handler, admin_order_detail_handler, admin_setstatus_handler,
     admin_users_handler, admin_user_detail_handler, admin_ban_handler,
     admin_unban_handler, admin_broadcast_handler, admin_coupons_handler,
@@ -108,6 +110,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_addcat_handler, pattern=r"^adm_addcat$"))
     app.add_handler(CallbackQueryHandler(admin_editcat_handler, pattern=r"^adm_editcat_\d+$"))
     app.add_handler(CallbackQueryHandler(admin_delcat_handler, pattern=r"^adm_delcat_\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_confirmdelcat_handler, pattern=r"^adm_confirmdelcat_\d+$"))
 
     # Admin Products
     app.add_handler(CallbackQueryHandler(admin_prods_handler, pattern=r"^adm_prods$"))
@@ -115,6 +118,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_addprod_handler, pattern=r"^adm_addprod$"))
     app.add_handler(CallbackQueryHandler(admin_editprod_handler, pattern=r"^adm_editprod_"))
     app.add_handler(CallbackQueryHandler(admin_delprod_handler, pattern=r"^adm_delprod_\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_confirmdelprod_handler, pattern=r"^adm_confirmdelprod_\d+$"))
 
     # Admin Orders
     app.add_handler(CallbackQueryHandler(admin_orders_handler, pattern=r"^adm_orders$"))
