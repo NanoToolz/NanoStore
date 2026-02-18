@@ -200,4 +200,787 @@ async def init_db() -> None:
     logger.info("Database initialized with all tables.")
 
 
-# ... rest of database.py unchanged ...
+# ======================== USERS ========================
+
+async def ensure_user(user_id: int, full_name: str = "", username: str = "") -> None:
+    db = await get_db()
+    await db.execute(
+        """INSERT INTO users (user_id, full_name, username)
+           VALUES (?, ?, ?)
+           ON CONFLICT(user_id) DO UPDATE SET
+             full_name = excluded.full_name,
+             username  = excluded.username""",
+        (user_id, full_name, username),
+    )
+    await db.commit()
+
+
+async def get_user(user_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    return _row_to_dict(await cur.fetchone())
+
+
+async def get_all_users(limit: int = 20) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM users ORDER BY joined_at DESC LIMIT ?", (limit,)
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_user_count() -> int:
+    db = await get_db()
+    cur = await db.execute("SELECT COUNT(*) as cnt FROM users")
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def is_user_banned(user_id: int) -> bool:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT banned FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    return bool(row["banned"]) if row else False
+
+
+async def ban_user(user_id: int) -> None:
+    db = await get_db()
+    await db.execute("UPDATE users SET banned = 1 WHERE user_id = ?", (user_id,))
+    await db.commit()
+
+
+async def unban_user(user_id: int) -> None:
+    db = await get_db()
+    await db.execute("UPDATE users SET banned = 0 WHERE user_id = ?", (user_id,))
+    await db.commit()
+
+
+async def get_user_balance(user_id: int) -> float:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT balance FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["balance"] if row else 0.0
+
+
+async def update_user_balance(user_id: int, amount: float) -> None:
+    db = await get_db()
+    await db.execute(
+        "UPDATE users SET balance = MAX(0, balance + ?) WHERE user_id = ?",
+        (amount, user_id),
+    )
+    await db.commit()
+
+
+# ======================== CATEGORIES ========================
+
+async def get_active_categories() -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM categories WHERE active = 1 ORDER BY sort_order, id"
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_all_categories() -> list:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM categories ORDER BY sort_order, id")
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_category(cat_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM categories WHERE id = ?", (cat_id,))
+    return _row_to_dict(await cur.fetchone())
+
+
+async def add_category(name: str, emoji: str = "", sort_order: int = 0) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO categories (name, emoji, sort_order) VALUES (?, ?, ?)",
+        (name, emoji, sort_order),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def update_category(cat_id: int, **kwargs) -> None:
+    db = await get_db()
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        fields.append(f"{k} = ?")
+        values.append(v)
+    if not fields:
+        return
+    values.append(cat_id)
+    await db.execute(
+        f"UPDATE categories SET {', '.join(fields)} WHERE id = ?", values
+    )
+    await db.commit()
+
+
+async def delete_category(cat_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+    await db.commit()
+
+
+async def get_product_count_in_category(cat_id: int) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM products WHERE category_id = ?", (cat_id,)
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+# ======================== PRODUCTS ========================
+
+async def get_products_by_category(
+    cat_id: int, limit: int = 100, offset: int = 0
+) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT * FROM products
+           WHERE category_id = ? AND active = 1
+           ORDER BY id LIMIT ? OFFSET ?""",
+        (cat_id, limit, offset),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_product(prod_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM products WHERE id = ?", (prod_id,))
+    return _row_to_dict(await cur.fetchone())
+
+
+async def add_product(
+    cat_id: int, name: str, description: str = "",
+    price: float = 0, stock: int = -1,
+) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        """INSERT INTO products (category_id, name, description, price, stock)
+           VALUES (?, ?, ?, ?, ?)""",
+        (cat_id, name, description, price, stock),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def update_product(prod_id: int, **kwargs) -> None:
+    db = await get_db()
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        fields.append(f"{k} = ?")
+        values.append(v)
+    if not fields:
+        return
+    values.append(prod_id)
+    await db.execute(
+        f"UPDATE products SET {', '.join(fields)} WHERE id = ?", values
+    )
+    await db.commit()
+
+
+async def delete_product(prod_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM products WHERE id = ?", (prod_id,))
+    await db.commit()
+
+
+async def search_products(query: str) -> list:
+    db = await get_db()
+    pattern = f"%{query}%"
+    cur = await db.execute(
+        """SELECT * FROM products
+           WHERE active = 1 AND (name LIKE ? OR description LIKE ?)
+           ORDER BY name LIMIT 50""",
+        (pattern, pattern),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def decrement_stock(product_id: int, quantity: int) -> None:
+    db = await get_db()
+    await db.execute(
+        """UPDATE products SET stock = stock - ?
+           WHERE id = ? AND stock > 0""",
+        (quantity, product_id),
+    )
+    await db.commit()
+
+
+# ======================== PRODUCT FAQ & MEDIA ========================
+
+async def get_product_faqs(prod_id: int) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM product_faqs WHERE product_id = ?", (prod_id,)
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def add_product_faq(prod_id: int, question: str, answer: str) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO product_faqs (product_id, question, answer) VALUES (?, ?, ?)",
+        (prod_id, question, answer),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def delete_product_faq(faq_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM product_faqs WHERE id = ?", (faq_id,))
+    await db.commit()
+
+
+async def get_product_media(prod_id: int) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM product_media WHERE product_id = ?", (prod_id,)
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def add_product_media(prod_id: int, media_type: str, file_id: str) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO product_media (product_id, media_type, file_id) VALUES (?, ?, ?)",
+        (prod_id, media_type, file_id),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def delete_product_media(mid: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM product_media WHERE id = ?", (mid,))
+    await db.commit()
+
+
+# ======================== CART ========================
+
+async def get_cart(user_id: int) -> list:
+    """Get cart items with product details."""
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT c.id as cart_id, c.product_id, c.quantity,
+                  p.name, p.price, p.stock, p.image_id
+           FROM cart c JOIN products p ON c.product_id = p.id
+           WHERE c.user_id = ?
+           ORDER BY c.added_at""",
+        (user_id,),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_cart_count(user_id: int) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COALESCE(SUM(quantity), 0) as cnt FROM cart WHERE user_id = ?",
+        (user_id,),
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def get_cart_total(user_id: int) -> float:
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT COALESCE(SUM(c.quantity * p.price), 0) as total
+           FROM cart c JOIN products p ON c.product_id = p.id
+           WHERE c.user_id = ?""",
+        (user_id,),
+    )
+    row = await cur.fetchone()
+    return row["total"] if row else 0.0
+
+
+async def get_cart_item(cart_id: int) -> Optional[dict]:
+    """Get a single cart item with product info."""
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT c.id as cart_id, c.product_id, c.quantity,
+                  p.name, p.price, p.stock
+           FROM cart c JOIN products p ON c.product_id = p.id
+           WHERE c.id = ?""",
+        (cart_id,),
+    )
+    return _row_to_dict(await cur.fetchone())
+
+
+async def add_to_cart(user_id: int, product_id: int, quantity: int = 1) -> int:
+    """Add product to cart or increment quantity."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?",
+        (user_id, product_id),
+    )
+    existing = await cur.fetchone()
+
+    if existing:
+        new_qty = existing["quantity"] + quantity
+        await db.execute(
+            "UPDATE cart SET quantity = ? WHERE id = ?",
+            (new_qty, existing["id"]),
+        )
+        await db.commit()
+        return existing["id"]
+    else:
+        cur = await db.execute(
+            "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
+            (user_id, product_id, quantity),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def update_cart_qty(cart_id: int, quantity: int) -> None:
+    db = await get_db()
+    if quantity <= 0:
+        await db.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
+    else:
+        await db.execute(
+            "UPDATE cart SET quantity = ? WHERE id = ?", (quantity, cart_id)
+        )
+    await db.commit()
+
+
+async def remove_from_cart_by_id(cart_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
+    await db.commit()
+
+
+async def clear_cart(user_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+    await db.commit()
+
+
+# ======================== ORDERS ========================
+
+async def create_order(user_id: int, items: list, total: float) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        """INSERT INTO orders (user_id, items_json, total)
+           VALUES (?, ?, ?)""",
+        (user_id, json.dumps(items), total),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def get_order(order_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+    return _row_to_dict(await cur.fetchone())
+
+
+async def get_user_orders(
+    user_id: int, limit: int = 10, offset: int = 0
+) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT * FROM orders WHERE user_id = ?
+           ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+        (user_id, limit, offset),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_user_order_count(user_id: int) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM orders WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def get_all_orders(limit: int = 20) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM orders ORDER BY created_at DESC LIMIT ?", (limit,)
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def update_order(order_id: int, **kwargs) -> None:
+    db = await get_db()
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        fields.append(f"{k} = ?")
+        values.append(v)
+    if not fields:
+        return
+    values.append(order_id)
+    await db.execute(
+        f"UPDATE orders SET {', '.join(fields)} WHERE id = ?", values
+    )
+    await db.commit()
+
+
+# ======================== COUPONS ========================
+
+async def validate_coupon(code: str) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT * FROM coupons
+           WHERE code = ? AND active = 1
+             AND (max_uses = 0 OR used_count < max_uses)""",
+        (code,),
+    )
+    return _row_to_dict(await cur.fetchone())
+
+
+async def use_coupon(code: str) -> None:
+    db = await get_db()
+    await db.execute(
+        "UPDATE coupons SET used_count = used_count + 1 WHERE code = ?",
+        (code,),
+    )
+    await db.commit()
+
+
+async def get_all_coupons() -> list:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM coupons ORDER BY created_at DESC")
+    return _rows_to_list(await cur.fetchall())
+
+
+async def create_coupon(
+    code: str, discount_percent: int, max_uses: int = 0
+) -> None:
+    db = await get_db()
+    await db.execute(
+        """INSERT OR REPLACE INTO coupons (code, discount_percent, max_uses)
+           VALUES (?, ?, ?)""",
+        (code, discount_percent, max_uses),
+    )
+    await db.commit()
+
+
+async def delete_coupon(code: str) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM coupons WHERE code = ?", (code,))
+    await db.commit()
+
+
+async def toggle_coupon(code: str) -> None:
+    db = await get_db()
+    await db.execute(
+        "UPDATE coupons SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE code = ?",
+        (code,),
+    )
+    await db.commit()
+
+
+# ======================== PAYMENT METHODS ========================
+
+async def get_payment_methods() -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM payment_methods WHERE active = 1 ORDER BY id"
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_all_payment_methods() -> list:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM payment_methods ORDER BY id")
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_payment_method(method_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM payment_methods WHERE id = ?", (method_id,)
+    )
+    return _row_to_dict(await cur.fetchone())
+
+
+async def add_payment_method(
+    name: str, details: str, emoji: str = ""
+) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO payment_methods (name, details, emoji) VALUES (?, ?, ?)",
+        (name, details, emoji),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def delete_payment_method(method_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM payment_methods WHERE id = ?", (method_id,))
+    await db.commit()
+
+
+# ======================== PAYMENT PROOFS ========================
+
+async def create_payment_proof(
+    user_id: int, order_id: int, method_id: int, file_id: str
+) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        """INSERT INTO payment_proofs (user_id, order_id, method_id, file_id)
+           VALUES (?, ?, ?, ?)""",
+        (user_id, order_id, method_id, file_id),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def get_payment_proof(proof_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM payment_proofs WHERE id = ?", (proof_id,)
+    )
+    return _row_to_dict(await cur.fetchone())
+
+
+async def get_pending_proofs() -> list:
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT * FROM payment_proofs
+           WHERE status = 'pending_review'
+           ORDER BY created_at DESC"""
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_pending_proof_count() -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM payment_proofs WHERE status = 'pending_review'"
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def update_proof(proof_id: int, **kwargs) -> None:
+    db = await get_db()
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        fields.append(f"{k} = ?")
+        values.append(v)
+    if not fields:
+        return
+    values.append(proof_id)
+    await db.execute(
+        f"UPDATE payment_proofs SET {', '.join(fields)} WHERE id = ?", values
+    )
+    await db.commit()
+
+
+# ======================== SETTINGS ========================
+
+async def get_setting(key: str, default: str = "") -> str:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT value FROM settings WHERE key = ?", (key,),
+    )
+    row = await cur.fetchone()
+    return row["value"] if row else default
+
+
+async def set_setting(key: str, value: str) -> None:
+    db = await get_db()
+    await db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (key, value),
+    )
+    await db.commit()
+
+
+async def get_all_settings() -> list:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM settings ORDER BY key")
+    return _rows_to_list(await cur.fetchall())
+
+
+# ======================== FORCE JOIN ========================
+
+async def get_force_join_channels() -> list:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM force_join_channels ORDER BY id")
+    return _rows_to_list(await cur.fetchall())
+
+
+async def add_force_join_channel(
+    channel_id: str, name: str, invite_link: str
+) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO force_join_channels (channel_id, name, invite_link) VALUES (?, ?, ?)",
+        (channel_id, name, invite_link),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def delete_force_join_channel(fj_id: int) -> None:
+    db = await get_db()
+    await db.execute("DELETE FROM force_join_channels WHERE id = ?", (fj_id,))
+    await db.commit()
+
+
+# ======================== TICKETS ========================
+
+async def create_ticket(
+    user_id: int, subject: str, message: str
+) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO tickets (user_id, subject, message) VALUES (?, ?, ?)",
+        (user_id, subject, message),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def get_ticket(ticket_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    return _row_to_dict(await cur.fetchone())
+
+
+async def get_user_tickets(user_id: int, limit: int = 20) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM tickets WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (user_id, limit),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_open_tickets(limit: int = 20) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM tickets WHERE status = 'open' ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_all_tickets(limit: int = 30) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM tickets ORDER BY created_at DESC LIMIT ?", (limit,),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_open_ticket_count() -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM tickets WHERE status = 'open'",
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def close_ticket(ticket_id: int) -> None:
+    db = await get_db()
+    await db.execute(
+        "UPDATE tickets SET status = 'closed' WHERE id = ?", (ticket_id,),
+    )
+    await db.commit()
+
+
+async def reopen_ticket(ticket_id: int) -> None:
+    db = await get_db()
+    await db.execute(
+        "UPDATE tickets SET status = 'open' WHERE id = ?", (ticket_id,),
+    )
+    await db.commit()
+
+
+async def add_ticket_reply(
+    ticket_id: int, sender: str, message: str
+) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO ticket_replies (ticket_id, sender, message) VALUES (?, ?, ?)",
+        (ticket_id, sender, message),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def get_ticket_replies(ticket_id: int) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM ticket_replies WHERE ticket_id = ? ORDER BY created_at",
+        (ticket_id,),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+# ======================== ACTION LOGS ========================
+
+async def add_action_log(
+    action: str, user_id: int = 0, details: str = ""
+) -> None:
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO action_logs (action, user_id, details) VALUES (?, ?, ?)",
+        (action, user_id, details),
+    )
+    await db.commit()
+
+
+# ======================== DASHBOARD STATS ========================
+
+async def get_dashboard_stats() -> dict:
+    db = await get_db()
+
+    users = await db.execute("SELECT COUNT(*) as c FROM users")
+    users_row = await users.fetchone()
+
+    cats = await db.execute("SELECT COUNT(*) as c FROM categories")
+    cats_row = await cats.fetchone()
+
+    prods = await db.execute("SELECT COUNT(*) as c FROM products")
+    prods_row = await prods.fetchone()
+
+    orders = await db.execute("SELECT COUNT(*) as c FROM orders")
+    orders_row = await orders.fetchone()
+
+    revenue = await db.execute(
+        "SELECT COALESCE(SUM(total), 0) as r FROM orders WHERE payment_status = 'paid'",
+    )
+    rev_row = await revenue.fetchone()
+
+    proofs = await db.execute(
+        "SELECT COUNT(*) as c FROM payment_proofs WHERE status = 'pending_review'",
+    )
+    proofs_row = await proofs.fetchone()
+
+    tickets = await db.execute(
+        "SELECT COUNT(*) as c FROM tickets WHERE status = 'open'",
+    )
+    tickets_row = await tickets.fetchone()
+
+    return {
+        "users": users_row["c"],
+        "categories": cats_row["c"],
+        "products": prods_row["c"],
+        "orders": orders_row["c"],
+        "revenue": rev_row["r"],
+        "pending_proofs": proofs_row["c"],
+        "open_tickets": tickets_row["c"],
+    }
