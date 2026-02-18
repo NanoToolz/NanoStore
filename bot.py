@@ -57,6 +57,9 @@ from handlers.orders import (
     orders_page_handler,
     order_detail_handler,
 )
+from handlers.rewards import (
+    reward_handler,
+)
 from handlers.admin import (
     admin_handler,
     back_admin_handler,
@@ -147,21 +150,21 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         if update.callback_query:
             try:
                 await update.callback_query.answer(
-                    "⚠️ An error occurred. Please try again.", show_alert=True
+                    "\u26a0\ufe0f An error occurred. Please try again.", show_alert=True
                 )
             except Exception:
                 pass
         elif update.effective_message:
             try:
                 await update.effective_message.reply_text(
-                    "⚠️ An error occurred. Please try again."
+                    "\u26a0\ufe0f An error occurred. Please try again."
                 )
             except Exception:
                 pass
 
     if LOG_CHANNEL_ID:
         error_text = (
-            f"🚨 <b>Error Report</b>\n\n"
+            f"\U0001f6a8 <b>Error Report</b>\n\n"
             f"<pre>{escape(tb_text[-3000:])}</pre>"
         )
         try:
@@ -174,7 +177,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.error("Failed to send error to log channel: %s", e)
 
 
-# ════ TEXT / PHOTO ROUTERS ════
+# ======== TEXT / PHOTO ROUTERS ========
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route plain text messages based on user_data state."""
@@ -219,10 +222,10 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 def register_handlers(app: Application) -> None:
     """Register all handlers with correct priority ordering."""
 
-    # ════ COMMANDS ════
+    # ======== COMMANDS ========
     app.add_handler(CommandHandler("start", start_handler))
 
-    # ════ CALLBACK QUERIES ════
+    # ======== CALLBACK QUERIES ========
 
     # ---- Start / Menu / Help / Noop ----
     app.add_handler(CallbackQueryHandler(main_menu_handler, pattern=r"^main_menu$"))
@@ -249,6 +252,9 @@ def register_handlers(app: Application) -> None:
     # ---- Search ----
     app.add_handler(CallbackQueryHandler(search_handler, pattern=r"^search$"))
 
+    # ---- Daily Reward ----
+    app.add_handler(CallbackQueryHandler(reward_handler, pattern=r"^reward$"))
+
     # ---- Orders ----
     app.add_handler(CallbackQueryHandler(checkout_handler, pattern=r"^checkout$"))
     app.add_handler(CallbackQueryHandler(apply_coupon_handler, pattern=r"^apply_coupon:\d+$"))
@@ -270,6 +276,7 @@ def register_handlers(app: Application) -> None:
 
     # ---- Admin Panel ----
     app.add_handler(CallbackQueryHandler(admin_handler, pattern=r"^admin$"))
+    app.add_handler(CallbackQueryHandler(back_admin_handler, pattern=r"^back_admin$"))
     app.add_handler(CallbackQueryHandler(admin_dashboard_handler, pattern=r"^adm_dash$"))
 
     # ---- Admin: Categories ----
@@ -347,11 +354,11 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(admin_ticket_reopen_handler, pattern=r"^adm_ticket_reopen:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_ticket_detail_handler, pattern=r"^adm_ticket:\d+$"))
 
-    # ════ TEXT & PHOTO ROUTERS ════
+    # ======== TEXT & PHOTO ROUTERS ========
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
     app.add_handler(MessageHandler(filters.PHOTO, photo_router))
 
-    # ════ ERROR HANDLER ════
+    # ======== ERROR HANDLER ========
     app.add_error_handler(error_handler)
 
     logger.info("All handlers registered.")
