@@ -1,131 +1,162 @@
-"""NanoStore keyboards — all inline keyboard builders."""
+"""NanoStore inline keyboards — every keyboard used across all handlers."""
 
 import math
 from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 
 
-# ════════════════════════ HELPERS ════════════════════════
+# ════════════════════════ COMMON ════════════════════════
 
-def back_btn(target: str = "main_menu") -> Btn:
-    """Reusable back button."""
-    return Btn("◀️ Back", callback_data=target)
+def back_kb(target: str) -> InlineKeyboardMarkup:
+    """Single back button."""
+    label_map = {
+        "main_menu": "◀️ Main Menu",
+        "shop": "◀️ Shop",
+        "cart": "◀️ Cart",
+        "admin": "◀️ Admin Panel",
+        "adm_cats": "◀️ Categories",
+        "adm_orders": "◀️ Orders",
+        "adm_users": "◀️ Users",
+        "adm_coupons": "◀️ Coupons",
+        "adm_payments": "◀️ Payments",
+        "adm_proofs": "◀️ Proofs",
+        "adm_settings": "◀️ Settings",
+        "adm_fj": "◀️ Force Join",
+        "adm_tickets": "◀️ Tickets",
+        "support": "◀️ Support",
+        "my_orders": "◀️ My Orders",
+        "my_tickets": "◀️ My Tickets",
+        "checkout": "◀️ Checkout",
+    }
+    # Dynamic labels for patterns like adm_cat:5, adm_prod:12
+    label = label_map.get(target, "◀️ Back")
+    return InlineKeyboardMarkup([[Btn(label, callback_data=target)]])
 
 
-def back_kb(target: str = "main_menu") -> InlineKeyboardMarkup:
-    """Single back-button keyboard."""
-    return InlineKeyboardMarkup([[back_btn(target)]])
+# ════════════════════════ MAIN MENU ════════════════════════
 
-
-# ════════════════════════ USER KEYBOARDS ════════════════════════
-
-def main_menu_kb(is_admin: bool = False, cart_count: int = 0) -> InlineKeyboardMarkup:
-    """Main menu keyboard with dynamic cart count."""
-    cart_label = f"🛒 Cart ({cart_count})" if cart_count > 0 else "🛒 Cart"
+def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Main menu keyboard."""
     rows = [
-        [Btn("🛍️ Shop", callback_data="shop"),
-         Btn("🔍 Search", callback_data="search")],
-        [Btn(cart_label, callback_data="cart"),
-         Btn("📦 My Orders", callback_data="my_orders")],
-        [Btn("🎁 Daily Reward", callback_data="daily_reward"),
-         Btn("🎫 Support", callback_data="support")],
-        [Btn("ℹ️ Help", callback_data="help")],
+        [Btn("🛍️ Shop", callback_data="shop"), Btn("🔍 Search", callback_data="search")],
+        [Btn("🛒 Cart", callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
+        [Btn("🎫 Support", callback_data="support"), Btn("❓ Help", callback_data="help")],
     ]
     if is_admin:
         rows.append([Btn("⚙️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
-def categories_kb(categories: list[dict]) -> InlineKeyboardMarkup:
-    """Category list — 2 per row."""
+def force_join_kb(channels: list) -> InlineKeyboardMarkup:
+    """Force join channels keyboard."""
     rows = []
-    row = []
-    for c in categories:
-        row.append(Btn(f"{c['emoji']} {c['name']}", callback_data=f"cat:{c['id']}"))
-        if len(row) == 2:
-            rows.append(row)
-            row = []
-    if row:
+    for ch in channels:
+        rows.append([Btn(f"📢 {ch['name']}", url=ch["invite_link"])])
+    rows.append([Btn("✅ I've Joined", callback_data="verify_join")])
+    return InlineKeyboardMarkup(rows)
+
+
+# ════════════════════════ CATALOG ════════════════════════
+
+def categories_kb(categories: list) -> InlineKeyboardMarkup:
+    """Categories grid (2 per row)."""
+    rows = []
+    for i in range(0, len(categories), 2):
+        row = []
+        for cat in categories[i:i + 2]:
+            emoji = cat.get("emoji", "📁")
+            row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id']}"))
         rows.append(row)
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
     return InlineKeyboardMarkup(rows)
 
 
 def products_kb(
-    products: list[dict], cat_id: int, currency: str = "Rs",
-    page: int = 1, total_count: int = 0, per_page: int = 20
+    products: list, cat_id: int, currency: str,
+    page: int = 1, per_page: int = 20,
 ) -> InlineKeyboardMarkup:
-    """Product list with pagination."""
+    """Products list with pagination."""
+    total_pages = max(1, math.ceil(len(products) / per_page)) if products else 1
+    start = (page - 1) * per_page
+    display = products[start:start + per_page]
+
     rows = []
-    for p in products:
-        price = int(p['price']) if p['price'] == int(p['price']) else p['price']
+    for p in display:
+        price = int(p["price"]) if p["price"] == int(p["price"]) else p["price"]
+        stock_dot = "🟢" if p.get("stock", -1) != 0 else "🔴"
         rows.append([Btn(
-            f"🏷️ {p['name']} — {currency} {price}",
-            callback_data=f"prod:{p['id']}"
+            f"{stock_dot} {p['name']} — {currency} {price}",
+            callback_data=f"prod:{p['id']}",
         )])
 
-    total_pages = max(1, math.ceil(total_count / per_page)) if total_count else 1
+    # Pagination
     if total_pages > 1:
         nav = []
         if page > 1:
             nav.append(Btn("◀️ Prev", callback_data=f"cat:{cat_id}:p:{page - 1}"))
-        nav.append(Btn(f"Page {page}/{total_pages}", callback_data="noop"))
+        nav.append(Btn(f"📄 {page}/{total_pages}", callback_data="noop"))
         if page < total_pages:
             nav.append(Btn("Next ▶️", callback_data=f"cat:{cat_id}:p:{page + 1}"))
         rows.append(nav)
 
-    rows.append([Btn("◀️ Back to Categories", callback_data="shop")])
+    rows.append([Btn("◀️ Shop", callback_data="shop")])
     return InlineKeyboardMarkup(rows)
 
 
 def product_detail_kb(
-    product_id: int, cat_id: int, stock: int = -1,
-    faq_count: int = 0, media_counts: dict | None = None
+    product: dict,
+    has_faq: bool = False,
+    has_media: list = None,
 ) -> InlineKeyboardMarkup:
-    """Product detail buttons: cart, FAQ, media, back."""
+    """Product detail actions."""
+    pid = product["id"]
+    cat_id = product["category_id"]
     rows = []
 
-    if stock == 0:
-        rows.append([Btn("🔴 Out of Stock", callback_data="noop")])
-    else:
-        rows.append([Btn("🛒 Add to Cart", callback_data=f"add:{product_id}")])
+    # Add to cart (only if in stock)
+    if product.get("stock", -1) != 0:
+        rows.append([Btn("🛒 Add to Cart", callback_data=f"add:{pid}")])
 
-    if faq_count > 0:
-        rows.append([Btn(f"❓ FAQ ({faq_count})", callback_data=f"prod_faq:{product_id}")])
-
-    if media_counts:
+    # Media buttons
+    if has_media:
         media_row = []
-        if media_counts.get("video"):
-            media_row.append(Btn("🎬 Video", callback_data=f"prod_media:{product_id}:video"))
-        if media_counts.get("voice"):
-            media_row.append(Btn("🎙️ Voice", callback_data=f"prod_media:{product_id}:voice"))
-        if media_counts.get("file"):
-            media_row.append(Btn("📎 Files", callback_data=f"prod_media:{product_id}:file"))
-        if media_row:
-            rows.append(media_row)
+        for m in has_media:
+            mtype = m["media_type"]
+            labels = {"video": "🎬 Video", "voice": "🎙️ Voice", "file": "📎 File"}
+            label = labels.get(mtype, f"📎 {mtype}")
+            media_row.append(Btn(label, callback_data=f"prod_media:{pid}:{mtype}"))
+        rows.append(media_row)
 
-    rows.append([back_btn(f"cat:{cat_id}")])
+    # FAQ
+    if has_faq:
+        rows.append([Btn("❓ FAQs", callback_data=f"prod_faq:{pid}")])
+
+    rows.append([Btn("◀️ Back", callback_data=f"cat:{cat_id}")])
     return InlineKeyboardMarkup(rows)
 
 
-def product_faq_kb(product_id: int) -> InlineKeyboardMarkup:
-    """Back button from FAQ view."""
-    return InlineKeyboardMarkup([[back_btn(f"prod:{product_id}")]])
+def faq_kb(faqs: list, prod_id: int) -> InlineKeyboardMarkup:
+    """FAQ back button."""
+    return InlineKeyboardMarkup([
+        [Btn("◀️ Back to Product", callback_data=f"prod:{prod_id}")],
+    ])
 
 
 # ════════════════════════ CART ════════════════════════
 
-def cart_kb(cart_items: list[dict]) -> InlineKeyboardMarkup:
-    """Cart view with per-item controls."""
+def cart_kb(items: list) -> InlineKeyboardMarkup:
+    """Cart with per-item controls."""
     rows = []
-    for item in cart_items:
+    for item in items:
+        cid = item["cart_id"]
         rows.append([
-            Btn("➖", callback_data=f"cart_dec:{item['id']}"),
+            Btn("➖", callback_data=f"cart_dec:{cid}"),
             Btn(f"{item['quantity']}", callback_data="noop"),
-            Btn("➕", callback_data=f"cart_inc:{item['id']}"),
-            Btn("🗑️", callback_data=f"cart_del:{item['id']}"),
+            Btn("➕", callback_data=f"cart_inc:{cid}"),
+            Btn("🗑️", callback_data=f"cart_del:{cid}"),
         ])
+
     rows.append([
-        Btn("🗑️ Clear", callback_data="cart_clear"),
+        Btn("🗑️ Clear Cart", callback_data="cart_clear"),
         Btn("✅ Checkout", callback_data="checkout"),
     ])
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
@@ -133,17 +164,17 @@ def cart_kb(cart_items: list[dict]) -> InlineKeyboardMarkup:
 
 
 def empty_cart_kb() -> InlineKeyboardMarkup:
-    """Empty cart actions."""
+    """Empty cart options."""
     return InlineKeyboardMarkup([
         [Btn("🛍️ Shop", callback_data="shop")],
         [Btn("◀️ Main Menu", callback_data="main_menu")],
     ])
 
 
-# ════════════════════════ CHECKOUT / ORDERS ════════════════════════
+# ════════════════════════ ORDERS ════════════════════════
 
 def checkout_kb(order_id: int, has_balance: bool = False) -> InlineKeyboardMarkup:
-    """Checkout actions: coupon, balance, confirm, cancel."""
+    """Checkout summary actions."""
     rows = [
         [Btn("🎫 Apply Coupon", callback_data=f"apply_coupon:{order_id}")],
     ]
@@ -156,40 +187,35 @@ def checkout_kb(order_id: int, has_balance: bool = False) -> InlineKeyboardMarku
     return InlineKeyboardMarkup(rows)
 
 
-def payment_methods_kb(methods: list[dict], order_id: int) -> InlineKeyboardMarkup:
-    """Payment method selection."""
+def payment_methods_kb(methods: list, order_id: int) -> InlineKeyboardMarkup:
+    """Payment methods selection."""
     rows = []
     for m in methods:
+        emoji = m.get("emoji", "💳")
         rows.append([Btn(
-            f"{m['emoji']} {m['name']}",
-            callback_data=f"pay_method:{order_id}:{m['id']}"
+            f"{emoji} {m['name']}",
+            callback_data=f"pay_method:{order_id}:{m['id']}",
         )])
-    rows.append([Btn("❌ Cancel", callback_data="main_menu")])
+    rows.append([Btn("◀️ My Orders", callback_data="my_orders")])
     return InlineKeyboardMarkup(rows)
 
 
-def order_detail_kb(order_id: int, status: str = "pending") -> InlineKeyboardMarkup:
-    """User order detail view."""
-    rows = []
-    if status == "pending":
-        rows.append([Btn("💳 Pay Now", callback_data=f"pay:{order_id}")])
-        rows.append([Btn("❌ Cancel Order", callback_data=f"cancel_order:{order_id}")])
-    rows.append([back_btn("my_orders")])
-    return InlineKeyboardMarkup(rows)
-
-
-def orders_kb(orders: list[dict], currency: str = "Rs", page: int = 1, per_page: int = 10) -> InlineKeyboardMarkup:
-    """User orders list with pagination."""
-    from helpers import status_emoji
+def orders_kb(
+    orders: list, currency: str = "Rs",
+    page: int = 1, per_page: int = 10,
+) -> InlineKeyboardMarkup:
+    """User orders list."""
     rows = []
     for o in orders:
-        emoji = status_emoji(o["status"])
-        total = int(o['total']) if o['total'] == int(o['total']) else o['total']
+        oid = o["id"]
+        total = int(o["total"]) if o["total"] == int(o["total"]) else o["total"]
+        emoji = _order_status_icon(o["status"])
         rows.append([Btn(
-            f"{emoji} #{o['id']} — {currency} {total} ({o['status']})",
-            callback_data=f"order:{o['id']}"
+            f"{emoji} #{oid} — {currency} {total} — {o['status']}",
+            callback_data=f"order:{oid}",
         )])
 
+    # Pagination
     nav = []
     if page > 1:
         nav.append(Btn("◀️ Prev", callback_data=f"orders_p:{page - 1}"))
@@ -202,318 +228,311 @@ def orders_kb(orders: list[dict], currency: str = "Rs", page: int = 1, per_page:
     return InlineKeyboardMarkup(rows)
 
 
-# ════════════════════════ TICKETS ════════════════════════
-
-def support_kb(tickets: list[dict]) -> InlineKeyboardMarkup:
-    """Support menu: new ticket + existing tickets."""
-    rows = [[Btn("➕ New Ticket", callback_data="new_ticket")]]
-    for t in tickets[:10]:
-        status = "🟢" if t["status"] == "open" else "⚪"
-        rows.append([Btn(
-            f"{status} #{t['id']} — {t['subject'][:30]}",
-            callback_data=f"ticket:{t['id']}"
-        )])
-    rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
-    return InlineKeyboardMarkup(rows)
-
-
-def ticket_detail_kb(ticket_id: int, status: str = "open") -> InlineKeyboardMarkup:
-    """Ticket detail actions."""
+def order_detail_kb(order_id: int, status: str) -> InlineKeyboardMarkup:
+    """Order detail actions."""
     rows = []
-    if status == "open":
-        rows.append([
-            Btn("✉️ Reply", callback_data=f"ticket_reply:{ticket_id}"),
-            Btn("🔒 Close", callback_data=f"ticket_close:{ticket_id}"),
-        ])
-    else:
-        rows.append([Btn("🔓 Reopen", callback_data=f"ticket_reopen:{ticket_id}")])
-    rows.append([back_btn("support")])
+    if status in ("confirmed", "pending"):
+        rows.append([Btn("💳 Pay Now", callback_data=f"pay:{order_id}")])
+    rows.append([Btn("◀️ My Orders", callback_data="my_orders")])
     return InlineKeyboardMarkup(rows)
 
 
-# ════════════════════════ DAILY REWARD ════════════════════════
-
-def reward_kb(claimed: bool = False) -> InlineKeyboardMarkup:
-    """Daily reward screen buttons."""
-    rows = []
-    if not claimed:
-        rows.append([Btn("🎁 Claim Reward!", callback_data="claim_reward")])
-    rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
-    return InlineKeyboardMarkup(rows)
-
-
-# ════════════════════════ FORCE JOIN ════════════════════════
-
-def force_join_kb(channels: list[dict]) -> InlineKeyboardMarkup:
-    """Force join screen with channel URL buttons + verify."""
-    rows = []
-    for ch in channels:
-        rows.append([Btn(f"📢 Join {ch['channel_name']}", url=ch["channel_link"])])
-    rows.append([Btn("✅ I've Joined — Verify", callback_data="verify_join")])
-    return InlineKeyboardMarkup(rows)
+def _order_status_icon(status: str) -> str:
+    icons = {
+        "pending": "⏳",
+        "confirmed": "✅",
+        "processing": "⚙️",
+        "shipped": "🚚",
+        "completed": "✅",
+        "delivered": "📦",
+        "cancelled": "❌",
+    }
+    return icons.get(status, "📦")
 
 
-# ════════════════════════ ADMIN KEYBOARDS ════════════════════════
+# ════════════════════════ ADMIN ════════════════════════
 
 def admin_kb(pending_proofs: int = 0, open_tickets: int = 0) -> InlineKeyboardMarkup:
-    """Admin panel main keyboard."""
-    proofs_label = f"📸 Proofs ({pending_proofs})" if pending_proofs else "📸 Proofs"
-    tickets_label = f"🎫 Tickets ({open_tickets})" if open_tickets else "🎫 Tickets"
-    return InlineKeyboardMarkup([
-        [Btn("📂 Categories", callback_data="adm_cats"),
-         Btn("📦 Products", callback_data="adm_cats")],
-        [Btn("🛒 Orders", callback_data="adm_orders"),
-         Btn("👥 Users", callback_data="adm_users")],
-        [Btn("🎫 Coupons", callback_data="adm_coupons"),
-         Btn("💳 Payments", callback_data="adm_payments")],
-        [Btn(proofs_label, callback_data="adm_proofs"),
-         Btn(tickets_label, callback_data="adm_tickets")],
-        [Btn("📢 Force Join", callback_data="adm_fj"),
-         Btn("📥 Bulk Import", callback_data="adm_bulk")],
-        [Btn("📊 Dashboard", callback_data="adm_dash"),
-         Btn("⚙️ Settings", callback_data="adm_settings")],
-        [Btn("📣 Broadcast", callback_data="adm_broadcast")],
+    """Admin main panel."""
+    proof_badge = f" ({pending_proofs})" if pending_proofs else ""
+    ticket_badge = f" ({open_tickets})" if open_tickets else ""
+
+    rows = [
+        [Btn("📊 Dashboard", callback_data="adm_dash")],
+        [Btn("📂 Categories", callback_data="adm_cats"), Btn("🛒 Orders", callback_data="adm_orders")],
+        [Btn("👥 Users", callback_data="adm_users"), Btn("🎫 Coupons", callback_data="adm_coupons")],
+        [Btn("💳 Payments", callback_data="adm_payments"), Btn(f"📸 Proofs{proof_badge}", callback_data="adm_proofs")],
+        [Btn(f"🎫 Tickets{ticket_badge}", callback_data="adm_tickets"), Btn("⚙️ Settings", callback_data="adm_settings")],
+        [Btn("📢 Force Join", callback_data="adm_fj"), Btn("📣 Broadcast", callback_data="adm_broadcast")],
+        [Btn("📥 Bulk Import", callback_data="adm_bulk"), Btn("📊 Bulk Stock", callback_data="adm_bulk_stock")],
         [Btn("◀️ Main Menu", callback_data="main_menu")],
-    ])
+    ]
+    return InlineKeyboardMarkup(rows)
 
 
-def admin_cats_kb(categories: list[dict]) -> InlineKeyboardMarkup:
-    """Admin categories list."""
+# ---- Admin: Categories ----
+
+def admin_cats_kb(cats: list) -> InlineKeyboardMarkup:
+    """Admin category list."""
     rows = []
-    for c in categories:
+    for c in cats:
+        emoji = c.get("emoji", "📁")
+        active = "✅" if c.get("active", True) else "⛔"
         rows.append([Btn(
-            f"{c['emoji']} {c['name']}",
-            callback_data=f"adm_cat:{c['id']}"
+            f"{active} {emoji} {c['name']}",
+            callback_data=f"adm_cat:{c['id']}",
         )])
     rows.append([Btn("➕ Add Category", callback_data="adm_cat_add")])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
 def admin_cat_detail_kb(cat_id: int) -> InlineKeyboardMarkup:
-    """Admin category detail actions."""
+    """Category detail admin actions."""
     return InlineKeyboardMarkup([
+        [Btn("📦 Products", callback_data=f"adm_prods:{cat_id}")],
         [Btn("✏️ Edit", callback_data=f"adm_cat_edit:{cat_id}"),
          Btn("🖼️ Image", callback_data=f"adm_cat_img:{cat_id}")],
-        [Btn("📦 Products", callback_data=f"adm_prods:{cat_id}"),
-         Btn("🗑️ Delete", callback_data=f"adm_cat_del:{cat_id}")],
-        [back_btn("adm_cats")],
+        [Btn("🗑️ Delete", callback_data=f"adm_cat_del:{cat_id}")],
+        [Btn("◀️ Categories", callback_data="adm_cats")],
     ])
 
 
-def admin_prods_kb(products: list[dict], cat_id: int, currency: str = "Rs") -> InlineKeyboardMarkup:
-    """Admin products list in a category."""
+# ---- Admin: Products ----
+
+def admin_prods_kb(products: list, cat_id: int, currency: str) -> InlineKeyboardMarkup:
+    """Admin product list in category."""
     rows = []
     for p in products:
-        price = int(p['price']) if p['price'] == int(p['price']) else p['price']
+        price = int(p["price"]) if p["price"] == int(p["price"]) else p["price"]
         rows.append([Btn(
-            f"{p['name']} — {currency} {price}",
-            callback_data=f"adm_prod:{p['id']}"
+            f"🏷️ {p['name']} — {currency} {price}",
+            callback_data=f"adm_prod:{p['id']}",
         )])
     rows.append([Btn("➕ Add Product", callback_data=f"adm_prod_add:{cat_id}")])
-    rows.append([back_btn(f"adm_cat:{cat_id}")])
+    rows.append([Btn("◀️ Category", callback_data=f"adm_cat:{cat_id}")])
     return InlineKeyboardMarkup(rows)
 
 
 def admin_prod_detail_kb(prod_id: int) -> InlineKeyboardMarkup:
-    """Admin product detail actions."""
+    """Product detail admin actions."""
     return InlineKeyboardMarkup([
-        [Btn("✏️ Name", callback_data=f"adm_prod_edit:{prod_id}:name"),
-         Btn("💰 Price", callback_data=f"adm_prod_edit:{prod_id}:price")],
-        [Btn("📝 Desc", callback_data=f"adm_prod_edit:{prod_id}:description"),
-         Btn("📊 Stock", callback_data=f"adm_prod_stock:{prod_id}")],
-        [Btn("🖼️ Image", callback_data=f"adm_prod_img:{prod_id}"),
-         Btn("❓ FAQ", callback_data=f"adm_prod_faq_add:{prod_id}")],
-        [Btn("🎬 Media", callback_data=f"adm_prod_media_add:{prod_id}:video"),
-         Btn("🗑️ Delete", callback_data=f"adm_prod_del:{prod_id}")],
-        [back_btn("adm_cats")],
+        [
+            Btn("✏️ Name", callback_data=f"adm_prod_edit:{prod_id}:name"),
+            Btn("✏️ Desc", callback_data=f"adm_prod_edit:{prod_id}:description"),
+            Btn("✏️ Price", callback_data=f"adm_prod_edit:{prod_id}:price"),
+        ],
+        [
+            Btn("🖼️ Image", callback_data=f"adm_prod_img:{prod_id}"),
+            Btn("📊 Stock", callback_data=f"adm_prod_stock:{prod_id}"),
+        ],
+        [
+            Btn("❓ Add FAQ", callback_data=f"adm_prod_faq_add:{prod_id}"),
+            Btn("🎬 Add Media", callback_data=f"adm_prod_media_add:{prod_id}"),
+        ],
+        [Btn("🗑️ Delete Product", callback_data=f"adm_prod_del:{prod_id}")],
+        [Btn("◀️ Back", callback_data="adm_cats")],
     ])
 
 
-def admin_orders_kb(orders: list[dict], currency: str = "Rs") -> InlineKeyboardMarkup:
+# ---- Admin: Orders ----
+
+def admin_orders_kb(orders: list, currency: str) -> InlineKeyboardMarkup:
     """Admin orders list."""
-    from helpers import status_emoji
     rows = []
-    for o in orders[:20]:
-        emoji = status_emoji(o["status"])
-        total = int(o['total']) if o['total'] == int(o['total']) else o['total']
+    for o in orders:
+        oid = o["id"]
+        total = int(o["total"]) if o["total"] == int(o["total"]) else o["total"]
+        emoji = _order_status_icon(o["status"])
         rows.append([Btn(
-            f"{emoji} #{o['id']} — {currency} {total}",
-            callback_data=f"adm_order:{o['id']}"
+            f"{emoji} #{oid} — {currency} {total} — {o['status']}",
+            callback_data=f"adm_ord:{oid}",
         )])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
 def admin_order_detail_kb(order_id: int) -> InlineKeyboardMarkup:
-    """Admin order status change buttons."""
+    """Order admin actions."""
     statuses = [
-        ("confirmed", "✅"), ("processing", "🔵"), ("shipped", "📦"),
-        ("delivered", "🌟"), ("cancelled", "❌"),
+        ("confirmed", "✅"), ("processing", "⚙️"), ("shipped", "🚚"),
+        ("delivered", "📦"), ("completed", "✅"), ("cancelled", "❌"),
     ]
+
     rows = []
     row = []
-    for s, emoji in statuses:
-        row.append(Btn(f"{emoji} {s.title()}", callback_data=f"adm_order_status:{order_id}:{s}"))
+    for st, em in statuses:
+        row.append(Btn(f"{em} {st.title()}", callback_data=f"adm_ord_st:{order_id}:{st}"))
         if len(row) == 3:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
-    rows.append([back_btn("adm_orders")])
+
+    rows.append([Btn("◀️ Orders", callback_data="adm_orders")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_users_kb(users: list[dict]) -> InlineKeyboardMarkup:
-    """Admin users list."""
+# ---- Admin: Users ----
+
+def admin_users_kb(users: list) -> InlineKeyboardMarkup:
+    """Admin user list."""
     rows = []
-    for u in users[:20]:
-        banned = "🔴" if u["banned"] else "🟢"
-        name = u["full_name"] or u["username"] or str(u["user_id"])
+    for u in users:
+        uid = u["user_id"]
+        name = u.get("full_name", str(uid)) or str(uid)
+        ban_dot = "🔴" if u.get("banned") else "🟢"
         rows.append([Btn(
-            f"{banned} {name}",
-            callback_data=f"adm_user:{u['user_id']}"
+            f"{ban_dot} {name[:25]} ({uid})",
+            callback_data=f"adm_user:{uid}",
         )])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_user_detail_kb(user_id: int, is_banned: bool) -> InlineKeyboardMarkup:
-    """Admin user detail: ban/unban."""
+def admin_user_detail_kb(uid: int, is_banned: bool) -> InlineKeyboardMarkup:
+    """User admin actions."""
+    rows = []
     if is_banned:
-        action_btn = Btn("✅ Unban", callback_data=f"adm_unban:{user_id}")
+        rows.append([Btn("✅ Unban", callback_data=f"adm_unban:{uid}")])
     else:
-        action_btn = Btn("🚫 Ban", callback_data=f"adm_ban:{user_id}")
-    return InlineKeyboardMarkup([
-        [action_btn],
-        [back_btn("adm_users")],
-    ])
+        rows.append([Btn("🚫 Ban", callback_data=f"adm_ban:{uid}")])
+    rows.append([Btn("◀️ Users", callback_data="adm_users")])
+    return InlineKeyboardMarkup(rows)
 
 
-def admin_coupons_kb(coupons: list[dict]) -> InlineKeyboardMarkup:
+# ---- Admin: Coupons ----
+
+def admin_coupons_kb(coupons: list) -> InlineKeyboardMarkup:
     """Admin coupons list."""
     rows = []
     for c in coupons:
-        active = "🟢" if c["active"] else "🔴"
-        rows.append([Btn(
-            f"{active} {c['code']} — {c['discount_percent']}% off",
-            callback_data=f"adm_coupon_toggle:{c['code']}"
-        )])
+        code = c["code"]
+        active = "✅" if c.get("active", True) else "⛔"
+        disc = c.get("discount_percent", 0)
+        used = c.get("used_count", 0)
+        max_u = c.get("max_uses", 0)
+        max_label = f"/{max_u}" if max_u else "/∞"
+        rows.append([
+            Btn(f"{active} {code} ({disc}%) [{used}{max_label}]", callback_data=f"adm_coupon_toggle:{code}"),
+            Btn("🗑️", callback_data=f"adm_coupon_del:{code}"),
+        ])
     rows.append([Btn("➕ Add Coupon", callback_data="adm_coupon_add")])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_payments_kb(methods: list[dict]) -> InlineKeyboardMarkup:
+# ---- Admin: Payments ----
+
+def admin_payments_kb(methods: list) -> InlineKeyboardMarkup:
     """Admin payment methods list."""
     rows = []
     for m in methods:
-        rows.append([Btn(
-            f"{m['emoji']} {m['name']}",
-            callback_data=f"adm_pay_del:{m['id']}"
-        )])
-    rows.append([Btn("➕ Add Payment Method", callback_data="adm_pay_add")])
-    rows.append([back_btn("admin")])
+        emoji = m.get("emoji", "💳")
+        rows.append([
+            Btn(f"{emoji} {m['name']}", callback_data="noop"),
+            Btn("🗑️", callback_data=f"adm_pay_del:{m['id']}"),
+        ])
+    rows.append([Btn("➕ Add Method", callback_data="adm_pay_add")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_proofs_kb(proofs: list[dict]) -> InlineKeyboardMarkup:
+# ---- Admin: Proofs ----
+
+def admin_proofs_kb(proofs: list) -> InlineKeyboardMarkup:
     """Admin pending proofs list."""
     rows = []
-    for p in proofs[:20]:
+    for p in proofs:
+        pid = p["id"]
+        oid = p.get("order_id", "?")
         rows.append([Btn(
-            f"📸 Proof #{p['id']} — Order #{p['order_id']}",
-            callback_data=f"adm_proof:{p['id']}"
+            f"⏳ Proof #{pid} — Order #{oid}",
+            callback_data=f"adm_proof:{pid}",
         )])
     if not proofs:
         rows.append([Btn("✅ No pending proofs", callback_data="noop")])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
 def admin_proof_detail_kb(proof_id: int) -> InlineKeyboardMarkup:
-    """Admin proof review: approve/reject/post."""
+    """Proof detail admin actions."""
     return InlineKeyboardMarkup([
-        [Btn("✅ Approve", callback_data=f"adm_proof_approve:{proof_id}"),
-         Btn("❌ Reject", callback_data=f"adm_proof_reject:{proof_id}")],
+        [
+            Btn("✅ Approve", callback_data=f"adm_proof_ok:{proof_id}"),
+            Btn("❌ Reject", callback_data=f"adm_proof_rej:{proof_id}"),
+        ],
         [Btn("📢 Post to Channel", callback_data=f"adm_proof_post:{proof_id}")],
-        [back_btn("adm_proofs")],
+        [Btn("◀️ Proofs", callback_data="adm_proofs")],
     ])
 
 
-def admin_tickets_kb(tickets: list[dict]) -> InlineKeyboardMarkup:
+# ---- Admin: Tickets ----
+
+def admin_tickets_kb(tickets: list) -> InlineKeyboardMarkup:
     """Admin tickets list."""
     rows = []
-    for t in tickets[:20]:
-        status = "🟢" if t["status"] == "open" else "⚪"
+    for t in tickets:
+        emoji = "🟢" if t["status"] == "open" else "🔴"
         rows.append([Btn(
-            f"{status} #{t['id']} — {t['subject'][:30]}",
-            callback_data=f"adm_ticket:{t['id']}"
+            f"{emoji} #{t['id']} — {t['subject'][:25]}",
+            callback_data=f"adm_ticket:{t['id']}",
         )])
-    if not tickets:
-        rows.append([Btn("✅ No open tickets", callback_data="noop")])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_ticket_detail_kb(ticket_id: int, status: str = "open") -> InlineKeyboardMarkup:
-    """Admin ticket actions."""
+def admin_ticket_detail_kb(ticket_id: int, is_open: bool = True) -> InlineKeyboardMarkup:
+    """Ticket admin actions."""
     rows = []
-    if status == "open":
+    if is_open:
         rows.append([
-            Btn("✉️ Reply", callback_data=f"adm_ticket_reply:{ticket_id}"),
+            Btn("📝 Reply", callback_data=f"ticket_reply:{ticket_id}"),
             Btn("🔒 Close", callback_data=f"adm_ticket_close:{ticket_id}"),
         ])
     else:
-        rows.append([Btn("🔓 Reopen", callback_data=f"adm_ticket:{ticket_id}")])
-    rows.append([back_btn("adm_tickets")])
+        rows.append([Btn("🔓 Reopen", callback_data=f"adm_ticket_reopen:{ticket_id}")])
+    rows.append([Btn("◀️ Tickets", callback_data="adm_tickets")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_fj_kb(channels: list[dict]) -> InlineKeyboardMarkup:
+# ---- Admin: Force Join ----
+
+def admin_fj_kb(channels: list) -> InlineKeyboardMarkup:
     """Admin force join channels list."""
     rows = []
     for ch in channels:
-        rows.append([Btn(
-            f"📢 {ch['channel_name']}",
-            callback_data=f"adm_fj_del:{ch['id']}"
-        )])
+        rows.append([
+            Btn(f"📢 {ch['name']}", callback_data="noop"),
+            Btn("🗑️", callback_data=f"adm_fj_del:{ch['id']}"),
+        ])
     rows.append([Btn("➕ Add Channel", callback_data="adm_fj_add")])
-    rows.append([back_btn("admin")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
 
-def admin_bulk_kb() -> InlineKeyboardMarkup:
-    """Admin bulk import options."""
-    return InlineKeyboardMarkup([
-        [Btn("📥 Bulk Products", callback_data="adm_bulk")],
-        [Btn("📊 Bulk Stock Update", callback_data="adm_bulk_stock")],
-        [back_btn("admin")],
-    ])
+# ---- Admin: Settings ----
 
-
-def admin_settings_kb(settings: dict) -> InlineKeyboardMarkup:
+def admin_settings_kb(settings: list) -> InlineKeyboardMarkup:
     """Admin settings list."""
-    setting_labels = {
-        "store_name": "🏠 Store Name",
-        "currency": "💱 Currency",
-        "min_order": "💰 Min Order",
-        "contact": "📞 Contact",
-        "welcome_message": "📝 Welcome Message",
-        "welcome_image": "🖼️ Welcome Image",
-    }
     rows = []
-    for key, label in setting_labels.items():
-        val = settings.get(key, "")
-        display = val[:20] if val else "(not set)"
-        rows.append([Btn(f"{label}: {display}", callback_data=f"adm_set:{key}")])
-    rows.append([back_btn("admin")])
+    for s in settings:
+        key = s["key"]
+        value = s.get("value", "")
+        display = value[:20] + "..." if len(value) > 20 else value
+        rows.append([Btn(f"⚙️ {key}: {display}", callback_data=f"adm_set:{key}")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
 
+
+# ---- Admin: Broadcast ----
 
 def admin_broadcast_confirm_kb() -> InlineKeyboardMarkup:
-    """Confirm broadcast."""
+    """Broadcast confirm/cancel."""
     return InlineKeyboardMarkup([
-        [Btn("✅ Send to All Users", callback_data="adm_broadcast_confirm"),
-         Btn("❌ Cancel", callback_data="admin")],
+        [
+            Btn("✅ Send Broadcast", callback_data="adm_broadcast_go"),
+            Btn("❌ Cancel", callback_data="admin"),
+        ],
     ])
