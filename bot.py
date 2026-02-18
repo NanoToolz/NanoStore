@@ -43,6 +43,20 @@ from handlers.search import (
     search_handler,
     search_text_handler,
 )
+from handlers.orders import (
+    checkout_handler,
+    apply_coupon_handler,
+    coupon_text_handler,
+    apply_balance_handler,
+    confirm_order_handler,
+    cancel_order_handler,
+    pay_handler,
+    pay_method_handler,
+    proof_upload_handler,
+    my_orders_handler,
+    orders_page_handler,
+    order_detail_handler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +117,9 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if state == "search":
         await search_text_handler(update, context)
-    # Future states handled here:
+    elif state.startswith("apply_coupon:"):
+        await coupon_text_handler(update, context)
+    # Future states:
     # elif state == "ticket_subject": ...
     # elif state.startswith("ticket_reply:"): ...
     # elif state.startswith("adm_"): ...
@@ -115,8 +131,9 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not state:
         return
 
-    # Future states handled here:
-    # if state.startswith("proof_upload:"): ...
+    if state.startswith("proof_upload:"):
+        await proof_upload_handler(update, context)
+    # Future states:
     # elif state.startswith("adm_prod_img:"): ...
     # elif state.startswith("adm_cat_img:"): ...
     # elif state.startswith("adm_prod_media:"): ...
@@ -154,6 +171,18 @@ def register_handlers(app: Application) -> None:
 
     # Search
     app.add_handler(CallbackQueryHandler(search_handler, pattern=r"^search$"))
+
+    # Orders
+    app.add_handler(CallbackQueryHandler(checkout_handler, pattern=r"^checkout$"))
+    app.add_handler(CallbackQueryHandler(apply_coupon_handler, pattern=r"^apply_coupon:\d+$"))
+    app.add_handler(CallbackQueryHandler(apply_balance_handler, pattern=r"^apply_balance:\d+$"))
+    app.add_handler(CallbackQueryHandler(confirm_order_handler, pattern=r"^confirm_order:\d+$"))
+    app.add_handler(CallbackQueryHandler(cancel_order_handler, pattern=r"^cancel_order:\d+$"))
+    app.add_handler(CallbackQueryHandler(pay_method_handler, pattern=r"^pay_method:\d+:\d+$"))
+    app.add_handler(CallbackQueryHandler(pay_handler, pattern=r"^pay:\d+$"))
+    app.add_handler(CallbackQueryHandler(my_orders_handler, pattern=r"^my_orders$"))
+    app.add_handler(CallbackQueryHandler(orders_page_handler, pattern=r"^orders_p:\d+$"))
+    app.add_handler(CallbackQueryHandler(order_detail_handler, pattern=r"^order:\d+$"))
 
     # ---- TEXT & PHOTO ROUTERS ----
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
