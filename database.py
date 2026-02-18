@@ -37,7 +37,7 @@ def _rows_to_list(rows) -> list:
     return [dict(r) for r in rows]
 
 
-# ════════════════════════ INIT ════════════════════════
+# ======================== INIT ========================
 
 async def init_db() -> None:
     """Create all tables."""
@@ -56,7 +56,7 @@ async def init_db() -> None:
         CREATE TABLE IF NOT EXISTS categories (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT NOT NULL,
-            emoji       TEXT DEFAULT '📁',
+            emoji       TEXT DEFAULT '',
             image_id    TEXT DEFAULT NULL,
             sort_order  INTEGER DEFAULT 0,
             active      INTEGER DEFAULT 1,
@@ -118,7 +118,7 @@ async def init_db() -> None:
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             name    TEXT NOT NULL,
             details TEXT DEFAULT '',
-            emoji   TEXT DEFAULT '💳',
+            emoji   TEXT DEFAULT '',
             active  INTEGER DEFAULT 1
         );
 
@@ -186,7 +186,7 @@ async def init_db() -> None:
     defaults = {
         "currency": "Rs",
         "bot_name": "NanoStore",
-        "welcome_text": "Welcome to NanoStore! \ud83d\udecd\ufe0f",
+        "welcome_text": "Welcome to NanoStore!",
         "min_order": "0",
     }
     for key, value in defaults.items():
@@ -199,7 +199,7 @@ async def init_db() -> None:
     logger.info("Database initialized with all tables.")
 
 
-# ════════════════════════ USERS ════════════════════════
+# ======================== USERS ========================
 
 async def ensure_user(user_id: int, full_name: str = "", username: str = "") -> None:
     db = await get_db()
@@ -274,7 +274,7 @@ async def update_user_balance(user_id: int, amount: float) -> None:
     await db.commit()
 
 
-# ════════════════════════ CATEGORIES ════════════════════════
+# ======================== CATEGORIES ========================
 
 async def get_active_categories() -> list:
     db = await get_db()
@@ -296,7 +296,7 @@ async def get_category(cat_id: int) -> Optional[dict]:
     return _row_to_dict(await cur.fetchone())
 
 
-async def add_category(name: str, emoji: str = "📁", sort_order: int = 0) -> int:
+async def add_category(name: str, emoji: str = "", sort_order: int = 0) -> int:
     db = await get_db()
     cur = await db.execute(
         "INSERT INTO categories (name, emoji, sort_order) VALUES (?, ?, ?)",
@@ -337,7 +337,7 @@ async def get_product_count_in_category(cat_id: int) -> int:
     return row["cnt"] if row else 0
 
 
-# ════════════════════════ PRODUCTS ════════════════════════
+# ======================== PRODUCTS ========================
 
 async def get_products_by_category(
     cat_id: int, limit: int = 100, offset: int = 0
@@ -416,7 +416,7 @@ async def decrement_stock(product_id: int, quantity: int) -> None:
     await db.commit()
 
 
-# ════════════════════════ PRODUCT FAQ & MEDIA ════════════════════════
+# ======================== PRODUCT FAQ & MEDIA ========================
 
 async def get_product_faqs(prod_id: int) -> list:
     db = await get_db()
@@ -466,7 +466,7 @@ async def delete_product_media(mid: int) -> None:
     await db.commit()
 
 
-# ════════════════════════ CART ════════════════════════
+# ======================== CART ========================
 
 async def get_cart(user_id: int) -> list:
     """Get cart items with product details."""
@@ -566,7 +566,7 @@ async def clear_cart(user_id: int) -> None:
     await db.commit()
 
 
-# ════════════════════════ ORDERS ════════════════════════
+# ======================== ORDERS ========================
 
 async def create_order(user_id: int, items: list, total: float) -> int:
     db = await get_db()
@@ -630,7 +630,7 @@ async def update_order(order_id: int, **kwargs) -> None:
     await db.commit()
 
 
-# ════════════════════════ COUPONS ════════════════════════
+# ======================== COUPONS ========================
 
 async def validate_coupon(code: str) -> Optional[dict]:
     db = await get_db()
@@ -685,7 +685,7 @@ async def toggle_coupon(code: str) -> None:
     await db.commit()
 
 
-# ════════════════════════ PAYMENT METHODS ════════════════════════
+# ======================== PAYMENT METHODS ========================
 
 async def get_payment_methods() -> list:
     db = await get_db()
@@ -710,7 +710,7 @@ async def get_payment_method(method_id: int) -> Optional[dict]:
 
 
 async def add_payment_method(
-    name: str, details: str, emoji: str = "💳"
+    name: str, details: str, emoji: str = ""
 ) -> int:
     db = await get_db()
     cur = await db.execute(
@@ -727,7 +727,7 @@ async def delete_payment_method(method_id: int) -> None:
     await db.commit()
 
 
-# ════════════════════════ PAYMENT PROOFS ════════════════════════
+# ======================== PAYMENT PROOFS ========================
 
 async def create_payment_proof(
     user_id: int, order_id: int, method_id: int, file_id: str
@@ -785,7 +785,7 @@ async def update_proof(proof_id: int, **kwargs) -> None:
     await db.commit()
 
 
-# ════════════════════════ SETTINGS ════════════════════════
+# ======================== SETTINGS ========================
 
 async def get_setting(key: str, default: str = "") -> str:
     db = await get_db()
@@ -811,7 +811,7 @@ async def get_all_settings() -> list:
     return _rows_to_list(await cur.fetchall())
 
 
-# ════════════════════════ FORCE JOIN ════════════════════════
+# ======================== FORCE JOIN ========================
 
 async def get_force_join_channels() -> list:
     db = await get_db()
@@ -837,7 +837,7 @@ async def delete_force_join_channel(fj_id: int) -> None:
     await db.commit()
 
 
-# ════════════════════════ TICKETS ════════════════════════
+# ======================== TICKETS ========================
 
 async def create_ticket(
     user_id: int, subject: str, message: str
@@ -929,7 +929,7 @@ async def get_ticket_replies(ticket_id: int) -> list:
     return _rows_to_list(await cur.fetchall())
 
 
-# ════════════════════════ ACTION LOGS ════════════════════════
+# ======================== ACTION LOGS ========================
 
 async def add_action_log(
     action: str, user_id: int = 0, details: str = ""
@@ -942,7 +942,7 @@ async def add_action_log(
     await db.commit()
 
 
-# ════════════════════════ DASHBOARD STATS ════════════════════════
+# ======================== DASHBOARD STATS ========================
 
 async def get_dashboard_stats() -> dict:
     db = await get_db()
