@@ -57,6 +57,70 @@ from handlers.orders import (
     orders_page_handler,
     order_detail_handler,
 )
+from handlers.admin import (
+    admin_handler,
+    back_admin_handler,
+    admin_dashboard_handler,
+    # Categories
+    admin_cats_handler,
+    admin_cat_add_handler,
+    admin_cat_detail_handler,
+    admin_cat_edit_handler,
+    admin_cat_del_handler,
+    admin_cat_img_handler,
+    # Products
+    admin_prods_handler,
+    admin_prod_add_handler,
+    admin_prod_detail_handler,
+    admin_prod_edit_handler,
+    admin_prod_del_handler,
+    admin_prod_img_handler,
+    admin_prod_stock_handler,
+    admin_prod_faq_add_handler,
+    admin_prod_faq_del_handler,
+    admin_prod_media_add_handler,
+    admin_prod_media_del_handler,
+    # Orders
+    admin_orders_handler,
+    admin_order_detail_handler,
+    admin_order_status_handler,
+    # Users
+    admin_users_handler,
+    admin_user_detail_handler,
+    admin_ban_handler,
+    admin_unban_handler,
+    # Coupons
+    admin_coupons_handler,
+    admin_coupon_add_handler,
+    admin_coupon_toggle_handler,
+    admin_coupon_del_handler,
+    # Payments
+    admin_payments_handler,
+    admin_pay_add_handler,
+    admin_pay_del_handler,
+    # Proofs
+    admin_proofs_handler,
+    admin_proof_detail_handler,
+    admin_proof_approve_handler,
+    admin_proof_reject_handler,
+    admin_proof_post_handler,
+    # Settings
+    admin_settings_handler,
+    admin_set_handler,
+    # Force Join
+    admin_fj_handler,
+    admin_fj_add_handler,
+    admin_fj_del_handler,
+    # Bulk
+    admin_bulk_handler,
+    admin_bulk_stock_handler,
+    # Broadcast
+    admin_broadcast_handler,
+    admin_broadcast_confirm_handler,
+    # Routers
+    admin_text_router,
+    admin_photo_router,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +171,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.error("Failed to send error to log channel: %s", e)
 
 
-# ---- TEXT / PHOTO ROUTERS ----
+# ════ TEXT / PHOTO ROUTERS ════
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route plain text messages based on user_data state."""
@@ -115,14 +179,19 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not state:
         return
 
+    # Admin states (adm_ prefix)
+    if state.startswith("adm_"):
+        await admin_text_router(update, context)
+        return
+
+    # User states
     if state == "search":
         await search_text_handler(update, context)
     elif state.startswith("apply_coupon:"):
         await coupon_text_handler(update, context)
-    # Future states:
+    # Future:
     # elif state == "ticket_subject": ...
     # elif state.startswith("ticket_reply:"): ...
-    # elif state.startswith("adm_"): ...
 
 
 async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -131,29 +200,33 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not state:
         return
 
+    # Admin states
+    if state.startswith("adm_"):
+        await admin_photo_router(update, context)
+        return
+
+    # User states
     if state.startswith("proof_upload:"):
         await proof_upload_handler(update, context)
-    # Future states:
-    # elif state.startswith("adm_prod_img:"): ...
-    # elif state.startswith("adm_cat_img:"): ...
-    # elif state.startswith("adm_prod_media:"): ...
+    # Future:
+    # elif state.startswith("ticket_attach:"): ...
 
 
 def register_handlers(app: Application) -> None:
     """Register all handlers with correct priority ordering."""
 
-    # ---- COMMANDS ----
+    # ════ COMMANDS ════
     app.add_handler(CommandHandler("start", start_handler))
 
-    # ---- CALLBACK QUERIES (most specific patterns first) ----
+    # ════ CALLBACK QUERIES (most specific patterns first) ════
 
-    # Start / Menu / Help / Noop
+    # ---- Start / Menu / Help / Noop ----
     app.add_handler(CallbackQueryHandler(main_menu_handler, pattern=r"^main_menu$"))
     app.add_handler(CallbackQueryHandler(help_handler, pattern=r"^help$"))
     app.add_handler(CallbackQueryHandler(noop_handler, pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(verify_join_handler, pattern=r"^verify_join$"))
 
-    # Catalog
+    # ---- Catalog ----
     app.add_handler(CallbackQueryHandler(shop_handler, pattern=r"^shop$"))
     app.add_handler(CallbackQueryHandler(category_page_handler, pattern=r"^cat:\d+:p:\d+$"))
     app.add_handler(CallbackQueryHandler(category_handler, pattern=r"^cat:\d+$"))
@@ -162,17 +235,17 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(product_detail_handler, pattern=r"^prod:\d+$"))
     app.add_handler(CallbackQueryHandler(add_to_cart_handler, pattern=r"^add:\d+$"))
 
-    # Cart
+    # ---- Cart ----
     app.add_handler(CallbackQueryHandler(cart_handler, pattern=r"^cart$"))
     app.add_handler(CallbackQueryHandler(cart_inc_handler, pattern=r"^cart_inc:\d+$"))
     app.add_handler(CallbackQueryHandler(cart_dec_handler, pattern=r"^cart_dec:\d+$"))
     app.add_handler(CallbackQueryHandler(cart_del_handler, pattern=r"^cart_del:\d+$"))
     app.add_handler(CallbackQueryHandler(cart_clear_handler, pattern=r"^cart_clear$"))
 
-    # Search
+    # ---- Search ----
     app.add_handler(CallbackQueryHandler(search_handler, pattern=r"^search$"))
 
-    # Orders
+    # ---- Orders ----
     app.add_handler(CallbackQueryHandler(checkout_handler, pattern=r"^checkout$"))
     app.add_handler(CallbackQueryHandler(apply_coupon_handler, pattern=r"^apply_coupon:\d+$"))
     app.add_handler(CallbackQueryHandler(apply_balance_handler, pattern=r"^apply_balance:\d+$"))
@@ -184,11 +257,83 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(orders_page_handler, pattern=r"^orders_p:\d+$"))
     app.add_handler(CallbackQueryHandler(order_detail_handler, pattern=r"^order:\d+$"))
 
-    # ---- TEXT & PHOTO ROUTERS ----
+    # ---- Admin Panel ----
+    app.add_handler(CallbackQueryHandler(admin_handler, pattern=r"^admin$"))
+    app.add_handler(CallbackQueryHandler(admin_dashboard_handler, pattern=r"^adm_dash$"))
+
+    # ---- Admin: Categories ----
+    app.add_handler(CallbackQueryHandler(admin_cats_handler, pattern=r"^adm_cats$"))
+    app.add_handler(CallbackQueryHandler(admin_cat_add_handler, pattern=r"^adm_cat_add$"))
+    app.add_handler(CallbackQueryHandler(admin_cat_edit_handler, pattern=r"^adm_cat_edit:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_cat_del_handler, pattern=r"^adm_cat_del:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_cat_img_handler, pattern=r"^adm_cat_img:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_cat_detail_handler, pattern=r"^adm_cat:\d+$"))
+
+    # ---- Admin: Products ----
+    app.add_handler(CallbackQueryHandler(admin_prod_add_handler, pattern=r"^adm_prod_add:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_edit_handler, pattern=r"^adm_prod_edit:\d+:\w+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_del_handler, pattern=r"^adm_prod_del:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_img_handler, pattern=r"^adm_prod_img:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_stock_handler, pattern=r"^adm_prod_stock:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_faq_add_handler, pattern=r"^adm_prod_faq_add:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_faq_del_handler, pattern=r"^adm_prod_faq_del:\d+:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_media_add_handler, pattern=r"^adm_prod_media_add:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_media_add_handler, pattern=r"^adm_prod_media_add:\d+:\w+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_media_del_handler, pattern=r"^adm_prod_media_del:\d+:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prods_handler, pattern=r"^adm_prods:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_prod_detail_handler, pattern=r"^adm_prod:\d+$"))
+
+    # ---- Admin: Orders ----
+    app.add_handler(CallbackQueryHandler(admin_orders_handler, pattern=r"^adm_orders$"))
+    app.add_handler(CallbackQueryHandler(admin_order_status_handler, pattern=r"^adm_ord_st:\d+:\w+$"))
+    app.add_handler(CallbackQueryHandler(admin_order_detail_handler, pattern=r"^adm_ord:\d+$"))
+
+    # ---- Admin: Users ----
+    app.add_handler(CallbackQueryHandler(admin_users_handler, pattern=r"^adm_users$"))
+    app.add_handler(CallbackQueryHandler(admin_ban_handler, pattern=r"^adm_ban:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_unban_handler, pattern=r"^adm_unban:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_user_detail_handler, pattern=r"^adm_user:\d+$"))
+
+    # ---- Admin: Coupons ----
+    app.add_handler(CallbackQueryHandler(admin_coupons_handler, pattern=r"^adm_coupons$"))
+    app.add_handler(CallbackQueryHandler(admin_coupon_add_handler, pattern=r"^adm_coupon_add$"))
+    app.add_handler(CallbackQueryHandler(admin_coupon_toggle_handler, pattern=r"^adm_coupon_toggle:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_coupon_del_handler, pattern=r"^adm_coupon_del:.+$"))
+
+    # ---- Admin: Payment Methods ----
+    app.add_handler(CallbackQueryHandler(admin_payments_handler, pattern=r"^adm_payments$"))
+    app.add_handler(CallbackQueryHandler(admin_pay_add_handler, pattern=r"^adm_pay_add$"))
+    app.add_handler(CallbackQueryHandler(admin_pay_del_handler, pattern=r"^adm_pay_del:\d+$"))
+
+    # ---- Admin: Proofs ----
+    app.add_handler(CallbackQueryHandler(admin_proofs_handler, pattern=r"^adm_proofs$"))
+    app.add_handler(CallbackQueryHandler(admin_proof_approve_handler, pattern=r"^adm_proof_ok:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_proof_reject_handler, pattern=r"^adm_proof_rej:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_proof_post_handler, pattern=r"^adm_proof_post:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_proof_detail_handler, pattern=r"^adm_proof:\d+$"))
+
+    # ---- Admin: Settings ----
+    app.add_handler(CallbackQueryHandler(admin_settings_handler, pattern=r"^adm_settings$"))
+    app.add_handler(CallbackQueryHandler(admin_set_handler, pattern=r"^adm_set:.+$"))
+
+    # ---- Admin: Force Join ----
+    app.add_handler(CallbackQueryHandler(admin_fj_handler, pattern=r"^adm_fj$"))
+    app.add_handler(CallbackQueryHandler(admin_fj_add_handler, pattern=r"^adm_fj_add$"))
+    app.add_handler(CallbackQueryHandler(admin_fj_del_handler, pattern=r"^adm_fj_del:\d+$"))
+
+    # ---- Admin: Bulk ----
+    app.add_handler(CallbackQueryHandler(admin_bulk_handler, pattern=r"^adm_bulk$"))
+    app.add_handler(CallbackQueryHandler(admin_bulk_stock_handler, pattern=r"^adm_bulk_stock$"))
+
+    # ---- Admin: Broadcast ----
+    app.add_handler(CallbackQueryHandler(admin_broadcast_handler, pattern=r"^adm_broadcast$"))
+    app.add_handler(CallbackQueryHandler(admin_broadcast_confirm_handler, pattern=r"^adm_broadcast_go$"))
+
+    # ════ TEXT & PHOTO ROUTERS ════
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
     app.add_handler(MessageHandler(filters.PHOTO, photo_router))
 
-    # ---- ERROR HANDLER ----
+    # ════ ERROR HANDLER ════
     app.add_error_handler(error_handler)
 
     logger.info("All handlers registered.")
