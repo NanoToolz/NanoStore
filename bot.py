@@ -62,7 +62,7 @@ async def photo_router(update, context):
 
 def main():
     if not BOT_TOKEN:
-        print("\u274c BOT_TOKEN not set! Create a .env file with your BOT_TOKEN.")
+        print("ERROR: BOT_TOKEN not set! Create a .env file with your BOT_TOKEN.")
         return
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
@@ -148,7 +148,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, photo_router))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
 
-    print("\ud83e\udd16 NanoStore Bot is running...")
+    print("[BOT] NanoStore Bot is running...")
     app.run_polling(allowed_updates=["message", "callback_query"])
 
 
