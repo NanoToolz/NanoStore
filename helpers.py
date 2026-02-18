@@ -140,6 +140,15 @@ def status_emoji(status: str) -> str:
     return emojis.get(status, "📌")
 
 
+def delivery_icon(delivery_type: str) -> str:
+    """Emoji icon for delivery type (auto/manual)."""
+    mapping = {
+        "auto": "⚡",    # instant / auto delivery
+        "manual": "🕐",  # manual delivery
+    }
+    return mapping.get(delivery_type, "📦")
+
+
 def truncate(text: str, max_len: int = 100) -> str:
     """Truncate text with ellipsis."""
     if not text:
