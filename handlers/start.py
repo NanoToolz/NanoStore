@@ -142,7 +142,8 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Return to main menu — clears any active conversation state.
     
-    Uses render_screen with welcome_image_id for consistent main menu experience.
+    This is the MAIN MENU screen (not welcome splash).
+    Uses safe_edit to avoid deleting messages.
     """
     query = update.callback_query
     await query.answer()
@@ -155,20 +156,13 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data.pop("temp", None)
 
     text = (
-        f"🏠 <b>{html_escape(store_name)}</b>\n\n"
-        f"Welcome back, {html_escape(user.first_name)}! 👋"
+        f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n\n"
+        f"Welcome back, {html_escape(user.first_name)}! 👋\n\n"
+        "Choose an option below:"
     )
     
-    # Use render_screen for consistent main menu experience
-    from helpers import render_screen
-    await render_screen(
-        query=query,
-        bot=context.bot,
-        chat_id=query.message.chat_id,
-        text=text,
-        reply_markup=main_menu_kb(is_admin=is_admin),
-        image_setting_key="welcome_image_id"
-    )
+    # Use safe_edit to avoid deleting the message
+    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

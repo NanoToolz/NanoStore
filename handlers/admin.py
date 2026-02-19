@@ -62,7 +62,7 @@ def _is_admin(user_id: int) -> bool:
 async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Admin panel main screen.
     
-    Uses render_screen with admin_panel_image_id.
+    Uses safe_edit to avoid deleting messages.
     """
     query = update.callback_query
     await query.answer()
@@ -88,16 +88,8 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"🎫 Tickets: <b>{stats['open_tickets']}</b>  |  💳 Top-Ups: <b>{stats['pending_topups']}</b>"
     )
     
-    # Use render_screen with admin_panel_image_id
-    from helpers import render_screen
-    await render_screen(
-        query=query,
-        bot=context.bot,
-        chat_id=query.message.chat_id,
-        text=text,
-        reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]),
-        image_setting_key="admin_panel_image_id"
-    )
+    # Use safe_edit to avoid deleting messages
+    await safe_edit(query, text, reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]))
 
 
 async def back_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
