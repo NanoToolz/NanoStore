@@ -64,7 +64,6 @@ def categories_kb(categories: list) -> InlineKeyboardMarkup:
         row = []
         for cat in categories[i:i + 2]:
             emoji = cat.get("emoji", "📁")
-            # FIXED: correct f-string quoting for cat['id']
             row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id']}"))
         rows.append(row)
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
@@ -516,24 +515,24 @@ def admin_fj_kb(channels: list) -> InlineKeyboardMarkup:
 # ---- Admin: Settings ----
 
 def admin_settings_kb() -> InlineKeyboardMarkup:
-    """Admin settings keyboard with mixed row sizes and welcome image option."""
+    """Admin settings keyboard with compact labels and welcome image option."""
     rows = [
         [
-            Btn("🏪 Store Name", callback_data="adm_set:bot_name"),
-            Btn("💰 Currency", callback_data="adm_set:currency"),
+            Btn("🏪 Name", callback_data="adm_set:bot_name"),
+            Btn("💰 Curr", callback_data="adm_set:currency"),
         ],
-        [Btn("👋 Welcome Text", callback_data="adm_set:welcome_text")],
-        [Btn("🖼️ Welcome Image", callback_data="adm_welcome_image")],
+        [Btn("👋 Welcome", callback_data="adm_set:welcome_text")],
+        [Btn("🖼️ Welcome Img", callback_data="adm_welcome_image")],
         [
-            Btn("🛒 Minimum Order", callback_data="adm_set:min_order"),
-            Btn("🎁 Daily Reward", callback_data="adm_set:daily_reward"),
+            Btn("🛒 Min Order", callback_data="adm_set:min_order"),
+            Btn("🎁 Reward", callback_data="adm_set:daily_reward"),
         ],
-        [Btn("⏱️ Auto-Delete Timer", callback_data="adm_set:auto_delete")],
+        [Btn("⏱️ Auto-Del", callback_data="adm_set:auto_delete")],
         [
-            Btn("🔧 Maintenance On/Off", callback_data="adm_set:maintenance"),
-            Btn("📝 Maint. Text", callback_data="adm_set:maintenance_text"),
+            Btn("🔧 Maint", callback_data="adm_set:maintenance"),
+            Btn("📝 Maint Txt", callback_data="adm_set:maintenance_text"),
         ],
-        [Btn("💳 Payment Instructions", callback_data="adm_set:payment_instructions")],
+        [Btn("💳 Pay Info", callback_data="adm_set:payment_instructions")],
         [Btn("◀️ Admin Panel", callback_data="admin")],
     ]
     return InlineKeyboardMarkup(rows)

@@ -1262,9 +1262,11 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if state == "adm_cat_name":
         context.user_data.pop("state", None)
         cat_id = await add_category(text)
+        # Immediately ask for category image so image + text workflow is smooth
+        context.user_data["state"] = f"adm_cat_img:{cat_id}"
         await update.message.reply_text(
             f"✅ Category <b>{html_escape(text)}</b> created (ID: {cat_id})\n\n"
-            "💡 Now set an image via Categories → Category → Set Image",
+            "📸 Now send a photo to set this category image.",
             parse_mode="HTML",
         )
         await add_action_log("cat_added", ADMIN_ID, text)
