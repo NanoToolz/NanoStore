@@ -1947,13 +1947,13 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # DIAGNOSTIC LOGGING
         logger.info(f"=== ADM_IMG_WAIT HANDLER TRIGGERED ===")
         logger.info(f"Key: {key}")
-        logger.info(f"Admin chat_id: {update.message.chat_id}")
+        logger.info(f"Admin chat_id: {update.effective_chat.id}")
         logger.info(f"Admin message_id: {update.message.message_id}")
         logger.info(f"File_id: {file_id[:50]}")
         
         # Save file_id to settings
         await set_setting(key, file_id)
-        logger.info(f"Saved {key} to settings")
+        logger.info(f"✅ Saved {key} to settings")
         
         # Map keys to friendly screen names
         screen_names = {
@@ -1967,42 +1967,46 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         }
         screen_name = screen_names.get(key, key)
         
-        # 1. Delete admin's photo message immediately
+        # 1. Try to delete admin's photo message (best effort - may fail in DM)
+        # Note: Telegram bots cannot delete user messages in private chats
         try:
             await update.message.delete()
-            logger.info(f"✅ Deleted admin photo message (chat={update.message.chat_id}, msg={update.message.message_id})")
+            logger.info(f"✅ Deleted admin photo message (chat={update.effective_chat.id}, msg={update.message.message_id})")
         except Exception as e:
-            logger.warning(f"❌ Failed to delete admin photo: {type(e).__name__}: {e}")
+            logger.info(f"ℹ️ Could not delete admin photo (expected in DM): {type(e).__name__}")
         
-        # 2. Delete the prompt message (the bot message that asked for photo)
+        # 2. Delete the prompt message (bot's own message - MUST work)
         prompt_msg_id = context.user_data.pop("adm_img_prompt_msg_id", None)
         logger.info(f"Prompt message_id from user_data: {prompt_msg_id}")
         
         if prompt_msg_id:
             try:
                 await context.bot.delete_message(
-                    chat_id=update.message.chat_id,
+                    chat_id=update.effective_chat.id,
                     message_id=prompt_msg_id
                 )
-                logger.info(f"✅ Deleted prompt message (chat={update.message.chat_id}, msg={prompt_msg_id})")
+                logger.info(f"✅ Deleted prompt message (chat={update.effective_chat.id}, msg={prompt_msg_id})")
             except Exception as e:
-                logger.warning(f"❌ Failed to delete prompt: {type(e).__name__}: {e}")
+                logger.warning(f"❌ Failed to delete prompt (bot's own message): {type(e).__name__}: {e}")
+        else:
+            logger.warning("⚠️ No prompt_msg_id found in user_data")
         
-        # 3. Send confirmation message
-        msg = await update.message.chat.send_message(
-            f"✅ <b>Image saved for {screen_name}!</b>\n\n"
-            "The image will now appear on this screen for all users.",
+        # 3. Send confirmation message (bot's own message)
+        msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"✅ <b>Image saved for {screen_name}!</b>\n\n"
+                 "The image will now appear on this screen for all users.",
             parse_mode="HTML"
         )
-        logger.info(f"Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
+        logger.info(f"✅ Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
         
-        # 4. Schedule deletion of confirmation using reliable method
+        # 4. Schedule deletion of confirmation (bot's own message - MUST work)
         from helpers import schedule_delete
         schedule_delete(context, msg.chat_id, msg.message_id, delay=7)
         
         # Clear state
         context.user_data.pop("state", None)
-        logger.info(f"Cleared state from user_data")
+        logger.info(f"✅ Cleared state from user_data")
         
         await add_action_log("image_set", ADMIN_ID, f"{key}: {file_id[:30]}")
         logger.info(f"=== ADM_IMG_WAIT HANDLER COMPLETE ===")
