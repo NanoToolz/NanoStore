@@ -29,9 +29,10 @@ async def render_screen(
     
     Behavior:
     1. If ui_images_enabled is "off", always use text-only mode
-    2. If image_setting_key has a file_id, send photo with caption + buttons (ONE message)
-    3. If no image, fall back to text-only mode
-    4. If photo send fails, fall back to text-only mode
+    2. If use_global_image is "on", use global_ui_image_id for ALL screens
+    3. Otherwise, use per-screen image_setting_key
+    4. If no image, fall back to text-only mode
+    5. If photo send fails, fall back to text-only mode
     
     Args:
         query: CallbackQuery when available (for editing existing messages)
@@ -64,8 +65,15 @@ async def render_screen(
             )
         return
     
-    # 2. Get image for this screen
-    image_id = await get_setting(image_setting_key, "")
+    # 2. Check if global image mode is enabled
+    use_global = await get_setting("use_global_image", "on")
+    
+    if use_global == "on":
+        # Use global image for ALL screens
+        image_id = await get_setting("global_ui_image_id", "")
+    else:
+        # Use per-screen image
+        image_id = await get_setting(image_setting_key, "")
     
     # 3. If no image, fall back to text-only
     if not image_id:

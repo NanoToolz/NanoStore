@@ -1125,6 +1125,10 @@ async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_
     if not _is_admin(update.effective_user.id):
         return
 
+    # Get status for global image
+    global_image_id = await get_setting("global_ui_image_id", "")
+    use_global = await get_setting("use_global_image", "on")
+    
     # Get status for all image AND text keys
     image_keys = [
         "welcome_image_id",
@@ -1146,7 +1150,11 @@ async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_
         "admin_panel_text",
     ]
     
-    statuses = {}
+    statuses = {
+        "global_ui_image_id": bool(global_image_id),
+        "use_global_image": use_global == "on",
+    }
+    
     for key in image_keys:
         val = await get_setting(key, "")
         statuses[key] = bool(val)
@@ -1158,13 +1166,15 @@ async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_
     ui_enabled = await get_setting("ui_images_enabled", "on")
     toggle_status = "🟢 ON" if ui_enabled == "on" else "🔴 OFF"
     
+    mode_desc = "Global image for ALL screens" if use_global == "on" else "Per-screen images"
+    
     text = (
         f"🧩 <b>Screen Content Manager</b>\n"
         f"{separator()}\n\n"
-        "Manage images and text for each screen.\n"
-        "Each screen can have custom image + text.\n\n"
-        f"🔧 Global Images Toggle: <b>{toggle_status}</b>\n\n"
-        "👇 Tap a screen to manage its content:"
+        "Manage images and text for each screen.\n\n"
+        f"🔧 Images: <b>{toggle_status}</b>\n"
+        f"🌐 Mode: <b>{mode_desc}</b>\n\n"
+        "👇 Configure global or per-screen content:"
     )
     
     from keyboards import admin_images_kb
@@ -1182,6 +1192,7 @@ async def admin_img_set_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     # Map keys to friendly screen names
     screen_names = {
+        "global_ui_image_id": "Global Banner (All Screens)",
         "welcome_image_id": "Welcome / Main Menu",
         "shop_image_id": "Shop",
         "cart_image_id": "Cart",
@@ -1223,6 +1234,7 @@ async def admin_img_clear_handler(update: Update, context: ContextTypes.DEFAULT_
     await set_setting(key, "")
     
     screen_names = {
+        "global_ui_image_id": "Global Banner",
         "welcome_image_id": "Welcome",
         "shop_image_id": "Shop",
         "cart_image_id": "Cart",
@@ -1252,6 +1264,24 @@ async def admin_img_toggle_handler(update: Update, context: ContextTypes.DEFAULT
     
     status = "🟢 ON" if new_val == "on" else "🔴 OFF"
     await query.answer(f"✅ Images: {status}", show_alert=True)
+    
+    # Refresh panel
+    await admin_img_panel_handler(update, context)
+
+
+async def admin_global_img_toggle_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle use_global_image on/off (global vs per-screen mode)."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    current = await get_setting("use_global_image", "on")
+    new_val = "off" if current == "on" else "on"
+    await set_setting("use_global_image", new_val)
+    
+    mode = "Global image for ALL screens" if new_val == "on" else "Per-screen images"
+    await query.answer(f"✅ Mode: {mode}", show_alert=True)
     
     # Refresh panel
     await admin_img_panel_handler(update, context)
@@ -2102,6 +2132,7 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         # Map keys to friendly screen names
         screen_names = {
+            "global_ui_image_id": "Global Banner (All Screens)",
             "welcome_image_id": "Welcome / Main Menu",
             "shop_image_id": "Shop",
             "cart_image_id": "Cart",
@@ -2112,15 +2143,7 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         }
         screen_name = screen_names.get(key, key)
         
-        # 1. Try to delete admin's photo message (best effort - may fail in DM)
-        # Note: Telegram bots cannot delete user messages in private chats
-        try:
-            await update.message.delete()
-            logger.info(f"✅ Deleted admin photo message (chat={update.effective_chat.id}, msg={update.message.message_id})")
-        except Exception as e:
-            logger.info(f"ℹ️ Could not delete admin photo (expected in DM): {type(e).__name__}")
-        
-        # 2. Delete the prompt message (bot's own message - MUST work)
+        # 1. Delete the prompt message (bot's own message - MUST work)
         prompt_msg_id = context.user_data.pop("adm_img_prompt_msg_id", None)
         logger.info(f"Prompt message_id from user_data: {prompt_msg_id}")
         
@@ -2136,7 +2159,7 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             logger.warning("⚠️ No prompt_msg_id found in user_data")
         
-        # 3. Send confirmation message (bot's own message)
+        # 2. Send confirmation message (bot's own message)
         msg = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"✅ <b>Image saved for {screen_name}!</b>\n\n"
@@ -2145,9 +2168,13 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         logger.info(f"✅ Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
         
-        # 4. Schedule deletion of confirmation (bot's own message - MUST work)
+        # 3. Schedule deletion of confirmation (bot's own message - MUST work)
         from helpers import schedule_delete
         schedule_delete(context, msg.chat_id, msg.message_id, delay=7)
+        
+        # 4. DO NOT delete admin's photo message (per requirement: default OFF)
+        # Admin photo stays in chat for reference
+        logger.info(f"ℹ️ Admin photo message NOT deleted (per requirement)")
         
         # Clear state
         context.user_data.pop("state", None)

@@ -199,6 +199,8 @@ async def init_db() -> None:
         "currency": "Rs",
         "bot_name": "NanoStore",
         "welcome_text": "Welcome to NanoStore!",
+        "use_global_image": "on",
+        "global_ui_image_id": "",
         "welcome_image_id": "",
         "ui_images_enabled": "on",
         "shop_image_id": "",

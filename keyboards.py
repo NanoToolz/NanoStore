@@ -575,7 +575,22 @@ def admin_images_kb(statuses: dict) -> InlineKeyboardMarkup:
     def txt_status(key: str) -> str:
         return "✅" if statuses.get(key, False) else "❌"
     
+    # Global image status
+    global_status = img_status('global_ui_image_id')
+    use_global = statuses.get('use_global_image', True)
+    global_toggle = "🟢 ON" if use_global else "🔴 OFF"
+    
     rows = [
+        [Btn("━━━━━━ GLOBAL IMAGE ━━━━━━", callback_data="noop")],
+        [Btn(f"🌐 Global Image: {global_status} | Mode: {global_toggle}", callback_data="noop")],
+        [
+            Btn("🖼 Set Global", callback_data="adm_img_set:global_ui_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:global_ui_image_id"),
+        ],
+        [Btn("🔧 Toggle Global/Per-Screen", callback_data="adm_global_img_toggle")],
+        
+        [Btn("━━━━ PER-SCREEN (when global OFF) ━━━━", callback_data="noop")],
+        
         [Btn(f"📱 Welcome: {img_status('welcome_image_id')} Image | {txt_status('welcome_text')} Text", callback_data="noop")],
         [
             Btn("🖼 Set Image", callback_data="adm_img_set:welcome_image_id"),
