@@ -30,7 +30,12 @@ PER_PAGE: int = 20
 
 
 async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show all active categories."""
+    """Show all active categories.
+
+    Now supports an optional Shop banner image.
+    If `shop_image_id` is set in settings, it is used.
+    Otherwise falls back to `welcome_image_id` (if any).
+    """
     query = update.callback_query
     await query.answer()
 
@@ -46,7 +51,30 @@ async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await safe_edit(query, text, reply_markup=back_kb("main_menu"))
         return
 
-    await safe_edit(query, text, reply_markup=categories_kb(cats))
+    kb = categories_kb(cats)
+
+    # Prefer dedicated shop banner; fall back to welcome image
+    shop_image_id = await get_setting("shop_image_id", "")
+    if not shop_image_id:
+        shop_image_id = await get_setting("welcome_image_id", "")
+
+    if shop_image_id:
+        try:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.message.chat.send_photo(
+                photo=shop_image_id,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=kb,
+            )
+            return
+        except Exception as e:
+            logger.warning("Shop image failed: %s", e)
+
+    await safe_edit(query, text, reply_markup=kb)
 
 
 async def stock_overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -102,7 +130,10 @@ async def category_page_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def _show_category_page(query, cat_id: int, page: int = 1) -> None:
-    """Internal: render category page with products."""
+    """Internal: render category page with products.
+
+    Uses category image as a banner if available.
+    """
     cat = await get_category(cat_id)
     if not cat:
         await safe_edit(query, "❌ Category not found.", reply_markup=back_kb("shop"))
@@ -129,6 +160,25 @@ async def _show_category_page(query, cat_id: int, page: int = 1) -> None:
         page=page,
         per_page=PER_PAGE,
     )
+
+    # If category has an image, use it as banner; otherwise just edit text
+    cat_image_id = cat.get("image_id")
+    if cat_image_id:
+        try:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.message.chat.send_photo(
+                photo=cat_image_id,
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=kb,
+            )
+            return
+        except Exception as e:
+            logger.warning("Category image failed for %s: %s", cat_id, e)
+
     await safe_edit(query, text, reply_markup=kb)
 
 
