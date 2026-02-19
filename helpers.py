@@ -357,6 +357,33 @@ async def auto_delete(message, delay: int | None = None) -> None:
         logger.warning("auto_delete could not create task (no running loop)")
 
 
+def schedule_delete(context, chat_id: int, message_id: int, delay: int = 7) -> None:
+    """Schedule message deletion using application.create_task.
+    
+    This is more reliable than asyncio.create_task as it uses the application's
+    task management system.
+    
+    Args:
+        context: Context from handler
+        chat_id: Chat ID where message is
+        message_id: Message ID to delete
+        delay: Delay in seconds before deletion (default: 7)
+    """
+    async def _delete_job():
+        try:
+            await asyncio.sleep(delay)
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            logger.info(f"Scheduled deletion successful: chat={chat_id}, msg={message_id}")
+        except Exception as e:
+            logger.warning(f"Scheduled deletion failed: chat={chat_id}, msg={message_id}, error={e}")
+    
+    try:
+        context.application.create_task(_delete_job())
+        logger.info(f"Scheduled delete task created: chat={chat_id}, msg={message_id}, delay={delay}s")
+    except Exception as e:
+        logger.error(f"Failed to create delete task: {e}")
+
+
 # ════════════════════════ VALIDATION ════════════════════════
 
 def is_valid_price(text: str) -> bool:

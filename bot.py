@@ -151,9 +151,21 @@ logger = logging.getLogger(__name__)
 
 
 async def post_init(application: Application) -> None:
-    """Initialize database after application starts."""
+    """Initialize database after application starts and notify admin."""
     await init_db()
     logger.info("Bot initialized. ADMIN_ID=%s", ADMIN_ID)
+    
+    # Send restart notification to admin
+    try:
+        await application.bot.send_message(
+            chat_id=ADMIN_ID,
+            text="✅ <b>Bot Restarted Successfully</b>\n\n"
+                 "All systems operational.",
+            parse_mode="HTML"
+        )
+        logger.info("Sent restart notification to admin")
+    except Exception as e:
+        logger.warning(f"Failed to send restart notification: {e}")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

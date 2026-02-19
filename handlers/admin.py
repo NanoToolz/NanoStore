@@ -1943,10 +1943,17 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # ── PRIORITY 1: Admin image settings (adm_img_wait:<key>) ──
     if state.startswith("adm_img_wait:"):
         key = state.split(":", 1)[1]
-        context.user_data.pop("state", None)
+        
+        # DIAGNOSTIC LOGGING
+        logger.info(f"=== ADM_IMG_WAIT HANDLER TRIGGERED ===")
+        logger.info(f"Key: {key}")
+        logger.info(f"Admin chat_id: {update.message.chat_id}")
+        logger.info(f"Admin message_id: {update.message.message_id}")
+        logger.info(f"File_id: {file_id[:50]}")
         
         # Save file_id to settings
         await set_setting(key, file_id)
+        logger.info(f"Saved {key} to settings")
         
         # Map keys to friendly screen names
         screen_names = {
@@ -1960,24 +1967,26 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         }
         screen_name = screen_names.get(key, key)
         
-        # 1. Delete admin's photo message (best effort)
+        # 1. Delete admin's photo message immediately
         try:
             await update.message.delete()
-            logger.info(f"Deleted admin photo message for {key}")
+            logger.info(f"✅ Deleted admin photo message (chat={update.message.chat_id}, msg={update.message.message_id})")
         except Exception as e:
-            logger.warning(f"Failed to delete admin photo message for {key}: {e}")
+            logger.warning(f"❌ Failed to delete admin photo: {type(e).__name__}: {e}")
         
         # 2. Delete the prompt message (the bot message that asked for photo)
         prompt_msg_id = context.user_data.pop("adm_img_prompt_msg_id", None)
+        logger.info(f"Prompt message_id from user_data: {prompt_msg_id}")
+        
         if prompt_msg_id:
             try:
                 await context.bot.delete_message(
                     chat_id=update.message.chat_id,
                     message_id=prompt_msg_id
                 )
-                logger.info(f"Deleted prompt message for {key}")
+                logger.info(f"✅ Deleted prompt message (chat={update.message.chat_id}, msg={prompt_msg_id})")
             except Exception as e:
-                logger.warning(f"Failed to delete prompt message for {key}: {e}")
+                logger.warning(f"❌ Failed to delete prompt: {type(e).__name__}: {e}")
         
         # 3. Send confirmation message
         msg = await update.message.chat.send_message(
@@ -1985,25 +1994,18 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "The image will now appear on this screen for all users.",
             parse_mode="HTML"
         )
+        logger.info(f"Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
         
-        # 4. Auto-delete confirmation after 7 seconds
-        try:
-            await auto_delete(msg, delay=7)
-            logger.info(f"Scheduled auto-delete for confirmation message (7s)")
-        except Exception as e:
-            logger.warning(f"Failed to schedule auto-delete for confirmation: {e}")
-            # Fallback: try direct deletion after sleep
-            try:
-                await asyncio.sleep(7)
-                await context.bot.delete_message(
-                    chat_id=msg.chat_id,
-                    message_id=msg.message_id
-                )
-                logger.info(f"Fallback deletion successful for confirmation")
-            except Exception as e2:
-                logger.warning(f"Fallback deletion also failed: {e2}")
+        # 4. Schedule deletion of confirmation using reliable method
+        from helpers import schedule_delete
+        schedule_delete(context, msg.chat_id, msg.message_id, delay=7)
+        
+        # Clear state
+        context.user_data.pop("state", None)
+        logger.info(f"Cleared state from user_data")
         
         await add_action_log("image_set", ADMIN_ID, f"{key}: {file_id[:30]}")
+        logger.info(f"=== ADM_IMG_WAIT HANDLER COMPLETE ===")
         return
 
     # ── Welcome image (legacy handler) ──
