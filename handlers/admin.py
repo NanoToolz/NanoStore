@@ -36,6 +36,7 @@ from database import (
 from helpers import (
     safe_edit, separator, send_typing, notify_log_channel,
     format_price, format_stock, status_emoji, delivery_icon, html_escape,
+    auto_delete,
 )
 from keyboards import (
     admin_kb, admin_cats_kb, admin_cat_detail_kb,
@@ -1107,6 +1108,128 @@ async def admin_welcome_image_handler(update: Update, context: ContextTypes.DEFA
     await safe_edit(query, text, reply_markup=back_kb("adm_settings"))
 
 
+# ════════════════════════ IMAGES PANEL (NEW) ════════════════════════
+
+async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show images panel with status for all 7 screen images."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    # Get status for all image keys
+    keys = [
+        "welcome_image_id",
+        "shop_image_id",
+        "cart_image_id",
+        "orders_image_id",
+        "wallet_image_id",
+        "support_image_id",
+        "admin_panel_image_id",
+    ]
+    
+    statuses = {}
+    for key in keys:
+        val = await get_setting(key, "")
+        statuses[key] = bool(val)
+    
+    ui_enabled = await get_setting("ui_images_enabled", "on")
+    toggle_status = "🟢 ON" if ui_enabled == "on" else "🔴 OFF"
+    
+    text = (
+        f"🖼️ <b>Image Settings</b>\n"
+        f"{separator()}\n\n"
+        "Manage per-screen images for your bot.\n"
+        "Each screen can have its own banner image.\n\n"
+        f"🔧 Global Toggle: <b>{toggle_status}</b>\n\n"
+        "👇 Tap a screen to set or clear its image:"
+    )
+    
+    from keyboards import admin_images_kb
+    await safe_edit(query, text, reply_markup=admin_images_kb(statuses))
+
+
+async def admin_img_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prompt admin to send a photo for a specific screen."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    key = query.data.split(":")[1]
+    
+    # Map keys to friendly screen names
+    screen_names = {
+        "welcome_image_id": "Welcome / Main Menu",
+        "shop_image_id": "Shop",
+        "cart_image_id": "Cart",
+        "orders_image_id": "Orders",
+        "wallet_image_id": "Wallet",
+        "support_image_id": "Support",
+        "admin_panel_image_id": "Admin Panel",
+    }
+    
+    screen_name = screen_names.get(key, key)
+    current = await get_setting(key, "")
+    status = "✅ Currently set" if current else "❌ Not set yet"
+    
+    context.user_data["state"] = f"adm_img_wait:{key}"
+    
+    text = (
+        f"🖼️ <b>Set Image: {screen_name}</b>\n"
+        f"{separator()}\n\n"
+        f"Status: {status}\n\n"
+        "📸 Send a photo to use for this screen.\n\n"
+        "<i>The photo will be shown with the screen text as a caption.</i>"
+    )
+    await safe_edit(query, text, reply_markup=back_kb("adm_img_panel"))
+
+
+async def admin_img_clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Clear image for a specific screen."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    key = query.data.split(":")[1]
+    await set_setting(key, "")
+    
+    screen_names = {
+        "welcome_image_id": "Welcome",
+        "shop_image_id": "Shop",
+        "cart_image_id": "Cart",
+        "orders_image_id": "Orders",
+        "wallet_image_id": "Wallet",
+        "support_image_id": "Support",
+        "admin_panel_image_id": "Admin Panel",
+    }
+    
+    screen_name = screen_names.get(key, key)
+    await query.answer(f"✅ {screen_name} image cleared!", show_alert=True)
+    
+    # Refresh panel
+    await admin_img_panel_handler(update, context)
+
+
+async def admin_img_toggle_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle ui_images_enabled on/off."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    current = await get_setting("ui_images_enabled", "on")
+    new_val = "off" if current == "on" else "on"
+    await set_setting("ui_images_enabled", new_val)
+    
+    status = "🟢 ON" if new_val == "on" else "🔴 OFF"
+    await query.answer(f"✅ Images: {status}", show_alert=True)
+    
+    # Refresh panel
+    await admin_img_panel_handler(update, context)
+
+
 # ════════════════════════ FORCE JOIN ════════════════════════
 
 async def admin_fj_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1399,11 +1522,13 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         cat_id = await add_category(text)
         # Immediately ask for category image so image + text workflow is smooth
         context.user_data["state"] = f"adm_cat_img:{cat_id}"
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"✅ Category <b>{html_escape(text)}</b> created (ID: {cat_id})\n\n"
             "📸 Now send a photo to set this category image.",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         await add_action_log("cat_added", ADMIN_ID, text)
         return
 
@@ -1416,26 +1541,32 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await update_category(cat_id, emoji=emoji.strip(), name=name.strip())
         else:
             await update_category(cat_id, name=text)
-        await update.message.reply_text("✅ Category updated!", parse_mode="HTML")
+        msg = await update.message.reply_text("✅ Category updated!", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product: name (step 1/3) ──
     if state.startswith("adm_prod_name:"):
         context.user_data["state"] = "adm_prod_desc"
         context.user_data.setdefault("temp", {})["name"] = text
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "Step 2/3: 📝 Send the product <b>description</b>:\n<i>(or <code>-</code> to skip)</i>",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product: description (step 2/3) ──
     if state == "adm_prod_desc":
         context.user_data["state"] = "adm_prod_price"
         context.user_data.setdefault("temp", {})["desc"] = "" if text == "-" else text
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "Step 3/3: 💰 Send the <b>price</b> (number only):", parse_mode="HTML"
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product: price (step 3/3 → create product) ──
@@ -1443,7 +1574,9 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             price = float(text)
         except ValueError:
-            await update.message.reply_text("❌ Invalid price. Send a number.", parse_mode="HTML")
+            msg = await update.message.reply_text("❌ Invalid price. Send a number.", parse_mode="HTML")
+            await auto_delete(msg)
+            await auto_delete(update.message)
             return
 
         context.user_data.pop("state", None)
@@ -1454,7 +1587,7 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         currency = await get_setting("currency", "Rs")
 
         prod_id = await add_product(cat_id, name, desc, price)
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"✅ <b>{html_escape(name)}</b> created!\n"
             f"💰 {format_price(price, currency)}  |  🆔 {prod_id}\n\n"
             "💡 Next steps:\n"
@@ -1463,6 +1596,8 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "• 📊 Set stock → Product → Stock",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         await add_action_log("prod_added", ADMIN_ID, f"{name} @ {price}")
         return
 
@@ -1477,12 +1612,16 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             try:
                 value = float(text)
             except ValueError:
-                await update.message.reply_text("❌ Invalid price.", parse_mode="HTML")
+                msg = await update.message.reply_text("❌ Invalid price.", parse_mode="HTML")
+                await auto_delete(msg)
+                await auto_delete(update.message)
                 return
             await update_product(prod_id, price=value)
         elif field in ("name", "description"):
             await update_product(prod_id, **{field: text})
-        await update.message.reply_text(f"✅ {field.title()} updated!", parse_mode="HTML")
+        msg = await update.message.reply_text(f"✅ {field.title()} updated!", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product: stock ──
@@ -1492,12 +1631,16 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             stock = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Send a number.", parse_mode="HTML")
+            msg = await update.message.reply_text("❌ Send a number.", parse_mode="HTML")
+            await auto_delete(msg)
+            await auto_delete(update.message)
             return
         await update_product(prod_id, stock=stock)
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"✅ Stock set to {format_stock(stock)}", parse_mode="HTML"
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product: delivery data (text) ──
@@ -1505,12 +1648,14 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         prod_id = int(state.split(":")[1])
         context.user_data.pop("state", None)
         await update_product(prod_id, delivery_data=text, delivery_type="auto")
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "✅ Delivery data saved!\n"
             "Delivery type set to ⚡ <b>Auto</b>.\n\n"
             "Customers will receive this text after payment approval.",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Coupon: create ──
@@ -1522,16 +1667,20 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             discount = int(parts[1].strip())
             max_uses = int(parts[2].strip()) if len(parts) > 2 else 0
             await create_coupon(code, discount, max_uses)
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 f"✅ Coupon <b>{html_escape(code)}</b> created!\n"
                 f"🎫 {discount}% off | Max: {max_uses or 'Unlimited'}",
                 parse_mode="HTML",
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
             await add_action_log("coupon_added", ADMIN_ID, code)
         except (ValueError, IndexError):
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 "❌ Format: <code>CODE|percent|max_uses</code>", parse_mode="HTML"
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
         return
 
     # ── Payment method: create ──
@@ -1543,13 +1692,17 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             name  = parts[1].strip()
             details = parts[2].strip()
             await add_payment_method(name, details, emoji)
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 f"✅ Payment method <b>{html_escape(name)}</b> added!", parse_mode="HTML"
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
         except (ValueError, IndexError):
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 "❌ Format: <code>emoji|name|details</code>", parse_mode="HTML"
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
         return
 
     # ── Force join: add channel ──
@@ -1558,13 +1711,17 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             parts = text.split("|", 2)
             await add_force_join_channel(parts[0].strip(), parts[1].strip(), parts[2].strip())
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 f"✅ Channel <b>{html_escape(parts[1].strip())}</b> added!", parse_mode="HTML"
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
         except (ValueError, IndexError):
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 "❌ Format: <code>channel_id|name|invite_link</code>", parse_mode="HTML"
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
         return
 
     # ── Bulk import ──
@@ -1586,12 +1743,14 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             except Exception:
                 errors += 1
 
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"📥 <b>Bulk Import Done!</b>\n\n"
             f"✅ Added: {added}\n❌ Errors: {errors}\n\n"
             "💡 Set images via Admin → Categories → Product → Set Image",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         await add_action_log("bulk_import", ADMIN_ID, f"Added:{added} Errors:{errors}")
         return
 
@@ -1608,10 +1767,12 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 updated += 1
             except Exception:
                 errors += 1
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"📊 <b>Stock Update Done!</b>\n\n✅ Updated: {updated}\n❌ Errors: {errors}",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Broadcast: preview ──
@@ -1619,7 +1780,7 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         context.user_data["state"] = None
         context.user_data.setdefault("temp", {})["broadcast_text"] = text
         user_count = await get_user_count()
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"📣 <b>Broadcast Preview</b>\n{separator()}\n\n"
             f"{text}\n\n"
             f"{separator()}\n"
@@ -1627,6 +1788,8 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             parse_mode="HTML",
             reply_markup=admin_broadcast_confirm_kb(),
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Settings: update value ──
@@ -1634,10 +1797,12 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         key = state.split(":")[1]
         context.user_data.pop("state", None)
         await set_setting(key, text)
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"✅ <b>{html_escape(key)}</b> updated!\n<code>{html_escape(text)}</code>",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Proof: rejection reason ──
@@ -1662,7 +1827,9 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             except Exception:
                 pass
             await add_action_log("proof_rejected", ADMIN_ID, f"#{proof_id}: {text}")
-        await update.message.reply_text("✅ Proof rejected.", parse_mode="HTML")
+        msg = await update.message.reply_text("✅ Proof rejected.", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Top-Up: rejection reason ──
@@ -1687,7 +1854,9 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             except Exception:
                 pass
             await add_action_log("topup_rejected", ADMIN_ID, f"#{topup_id}: {text}")
-        await update.message.reply_text("✅ Top-up rejected.", parse_mode="HTML")
+        msg = await update.message.reply_text("✅ Top-up rejected.", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product FAQ: add ──
@@ -1695,13 +1864,17 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         prod_id = int(state.split(":")[1])
         context.user_data.pop("state", None)
         if "|" not in text:
-            await update.message.reply_text(
+            msg = await update.message.reply_text(
                 "❌ Format: <code>question | answer</code>", parse_mode="HTML"
             )
+            await auto_delete(msg)
+            await auto_delete(update.message)
             return
         q, a = text.split("|", 1)
         await add_product_faq(prod_id, q.strip(), a.strip())
-        await update.message.reply_text("✅ FAQ added!", parse_mode="HTML")
+        msg = await update.message.reply_text("✅ FAQ added!", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
 
@@ -1710,8 +1883,16 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route admin photo/file uploads based on active state.
 
-    Handles: welcome image, product image, category image,
+    Handles: admin image settings, welcome image, product image, category image,
              product delivery data (file), product media.
+    
+    PRIORITY ORDER (CRITICAL):
+    1. adm_img_wait:<key> - Admin setting screen images (NEW)
+    2. adm_welcome_image - Legacy welcome image handler
+    3. adm_prod_img - Product images
+    4. adm_prod_deldata - Product delivery data
+    5. adm_cat_img - Category images
+    6. adm_prod_media - Product media files
     """
     if not _is_admin(update.effective_user.id):
         return
@@ -1738,15 +1919,56 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not file_id:
         return
 
-    # ── Welcome image ──
+    # ── PRIORITY 1: Admin image settings (adm_img_wait:<key>) ──
+    if state.startswith("adm_img_wait:"):
+        key = state.split(":", 1)[1]
+        context.user_data.pop("state", None)
+        
+        # Save file_id to settings
+        await set_setting(key, file_id)
+        
+        # Map keys to friendly screen names
+        screen_names = {
+            "welcome_image_id": "Welcome / Main Menu",
+            "shop_image_id": "Shop",
+            "cart_image_id": "Cart",
+            "orders_image_id": "Orders",
+            "wallet_image_id": "Wallet",
+            "support_image_id": "Support",
+            "admin_panel_image_id": "Admin Panel",
+        }
+        screen_name = screen_names.get(key, key)
+        
+        # Delete admin's photo message (best effort)
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        
+        # Send confirmation message
+        msg = await update.message.chat.send_message(
+            f"✅ <b>Image saved for {screen_name}!</b>\n\n"
+            "The image will now appear on this screen for all users.",
+            parse_mode="HTML"
+        )
+        
+        # Auto-delete confirmation after 7 seconds
+        await auto_delete(msg, delay=7)
+        
+        await add_action_log("image_set", ADMIN_ID, f"{key}: {file_id[:30]}")
+        return
+
+    # ── Welcome image (legacy handler) ──
     if state == "adm_welcome_image":
         context.user_data.pop("state", None)
         await set_setting("welcome_image_id", file_id)
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             "✅ <b>Welcome image updated!</b>\n\n"
             "📸 This image will now appear on /start for all users.",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         await add_action_log("welcome_image_set", ADMIN_ID, file_id[:30])
         return
 
@@ -1755,7 +1977,9 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         prod_id = int(state.split(":")[1])
         context.user_data.pop("state", None)
         await update_product(prod_id, image_id=file_id)
-        await update.message.reply_text("✅ Product image set!", parse_mode="HTML")
+        msg = await update.message.reply_text("✅ Product image set!", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product delivery data (file) ──
@@ -1763,12 +1987,14 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         prod_id = int(state.split(":")[1])
         context.user_data.pop("state", None)
         await update_product(prod_id, delivery_data=file_id, delivery_type="auto")
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"✅ Delivery file set! ({media_type})\n"
             "Delivery type → ⚡ <b>Auto</b>\n\n"
             "Customers will receive this file after payment approval.",
             parse_mode="HTML",
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Category image ──
@@ -1776,7 +2002,9 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         cat_id = int(state.split(":")[1])
         context.user_data.pop("state", None)
         await update_category(cat_id, image_id=file_id)
-        await update.message.reply_text("✅ Category image set!", parse_mode="HTML")
+        msg = await update.message.reply_text("✅ Category image set!", parse_mode="HTML")
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
     # ── Product media (video, voice, file as media) ──
@@ -1786,9 +2014,11 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         mtype = parts[2] if len(parts) > 2 else media_type
         context.user_data.pop("state", None)
         await add_product_media(prod_id, mtype, file_id)
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"✅ {mtype.title()} media added!", parse_mode="HTML"
         )
+        await auto_delete(msg)
+        await auto_delete(update.message)
         return
 
 

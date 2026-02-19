@@ -132,6 +132,10 @@ from handlers.admin import (
     admin_settings_handler,
     admin_set_handler,
     admin_welcome_image_handler,
+    admin_img_panel_handler,
+    admin_img_set_handler,
+    admin_img_clear_handler,
+    admin_img_toggle_handler,
     admin_fj_handler,
     admin_fj_add_handler,
     admin_fj_del_handler,
@@ -367,6 +371,10 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(admin_settings_handler, pattern=r"^adm_settings$"))
     app.add_handler(CallbackQueryHandler(admin_set_handler, pattern=r"^adm_set:.+$"))
     app.add_handler(CallbackQueryHandler(admin_welcome_image_handler, pattern=r"^adm_welcome_image$"))
+    app.add_handler(CallbackQueryHandler(admin_img_panel_handler, pattern=r"^adm_img_panel$"))
+    app.add_handler(CallbackQueryHandler(admin_img_set_handler, pattern=r"^adm_img_set:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_img_clear_handler, pattern=r"^adm_img_clear:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_img_toggle_handler, pattern=r"^adm_img_toggle$"))
 
     # ---- Admin: Force Join ----
     app.add_handler(CallbackQueryHandler(admin_fj_handler, pattern=r"^adm_fj$"))
@@ -400,6 +408,8 @@ def register_handlers(app: Application) -> None:
 
 def main() -> None:
     """Start the bot."""
+    import asyncio
+    
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
@@ -411,6 +421,12 @@ def main() -> None:
         return
 
     logger.info("Starting NanoStore Bot...")
+
+    # Fix for Python 3.14+ event loop issue
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     app = (
         Application.builder()
