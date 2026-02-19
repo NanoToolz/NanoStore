@@ -41,14 +41,14 @@ def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
     Row 1: 🛍️ Shop
     Row 2: 🛒 Cart | 📦 My Orders
     Row 3: 🎫 Support | ❓ Help
-    Row 4: 🔍 Search
+    Row 4: 🔍 Search | 💳 My Wallet
     Last (admin only): ⚙️ Admin Panel
     """
     rows = [
         [Btn("🛍️ Shop", callback_data="shop")],
         [Btn("🛒 Cart", callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
         [Btn("🎫 Support", callback_data="support"), Btn("❓ Help", callback_data="help")],
-        [Btn("🔍 Search", callback_data="search")],
+        [Btn("🔍 Search", callback_data="search"), Btn("💳 My Wallet", callback_data="wallet")],
     ]
     if is_admin:
         rows.append([Btn("⚙️ Admin Panel", callback_data="admin")])
@@ -263,19 +263,21 @@ def _order_status_icon(status: str) -> str:
 
 # ════════════════════════ ADMIN ════════════════════════
 
-def admin_kb(pending_proofs: int = 0, open_tickets: int = 0) -> InlineKeyboardMarkup:
+def admin_kb(pending_proofs: int = 0, open_tickets: int = 0, pending_topups: int = 0) -> InlineKeyboardMarkup:
     """Admin main panel."""
     proof_badge = f" ({pending_proofs})" if pending_proofs else ""
     ticket_badge = f" ({open_tickets})" if open_tickets else ""
+    topup_badge = f" ({pending_topups})" if pending_topups else ""
 
     rows = [
         [Btn("📊 Dashboard", callback_data="adm_dash")],
         [Btn("📂 Categories", callback_data="adm_cats"), Btn("🛒 Orders", callback_data="adm_orders")],
         [Btn("👥 Users", callback_data="adm_users"), Btn("🎫 Coupons", callback_data="adm_coupons")],
         [Btn("💳 Payments", callback_data="adm_payments"), Btn(f"📸 Proofs{proof_badge}", callback_data="adm_proofs")],
-        [Btn(f"🎫 Tickets{ticket_badge}", callback_data="adm_tickets"), Btn("⚙️ Settings", callback_data="adm_settings")],
-        [Btn("📢 Force Join", callback_data="adm_fj"), Btn("📣 Broadcast", callback_data="adm_broadcast")],
-        [Btn("📥 Bulk Import", callback_data="adm_bulk"), Btn("📊 Bulk Stock", callback_data="adm_bulk_stock")],
+        [Btn(f"💳 Top-Ups{topup_badge}", callback_data="adm_topups"), Btn(f"🎫 Tickets{ticket_badge}", callback_data="adm_tickets")],
+        [Btn("⚙️ Settings", callback_data="adm_settings"), Btn("📢 Force Join", callback_data="adm_fj")],
+        [Btn("📣 Broadcast", callback_data="adm_broadcast"), Btn("📥 Bulk Import", callback_data="adm_bulk")],
+        [Btn("📊 Bulk Stock", callback_data="adm_bulk_stock")],
         [Btn("◀️ Main Menu", callback_data="main_menu")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -541,6 +543,14 @@ def admin_settings_kb() -> InlineKeyboardMarkup:
             Btn("🎁 Reward", callback_data="adm_set:daily_reward"),
         ],
         [
+            Btn("💳 Top-Up On/Off", callback_data="adm_set:topup_enabled"),
+            Btn("💵 Min Top-Up", callback_data="adm_set:topup_min_amount"),
+        ],
+        [
+            Btn("💸 Max Top-Up", callback_data="adm_set:topup_max_amount"),
+            Btn("🎁 Bonus %", callback_data="adm_set:topup_bonus_percent"),
+        ],
+        [
             Btn("⏱️ Auto-Del", callback_data="adm_set:auto_delete"),
             Btn("🔧 Maint", callback_data="adm_set:maintenance"),
         ],
@@ -562,4 +572,67 @@ def admin_broadcast_confirm_kb() -> InlineKeyboardMarkup:
             Btn("✅ Send Broadcast", callback_data="adm_broadcast_go"),
             Btn("❌ Cancel", callback_data="admin"),
         ],
+    ])
+
+
+# ════════════════════════ WALLET ════════════════════════
+
+def wallet_kb() -> InlineKeyboardMarkup:
+    """Wallet main menu."""
+    return InlineKeyboardMarkup([
+        [Btn("💰 Top-Up Wallet", callback_data="wallet_topup")],
+        [Btn("📜 Top-Up History", callback_data="wallet_history")],
+        [Btn("◀️ Main Menu", callback_data="main_menu")],
+    ])
+
+
+def wallet_topup_amounts_kb(min_amt: float, max_amt: float, currency: str) -> InlineKeyboardMarkup:
+    """Wallet top-up amount selection."""
+    presets = [500, 1000, 2000, 5000]
+    rows = []
+    row = []
+    for amt in presets:
+        if min_amt <= amt <= max_amt:
+            row.append(Btn(f"{currency} {int(amt)}", callback_data=f"wallet_amt:{amt}"))
+            if len(row) == 2:
+                rows.append(row)
+                row = []
+    if row:
+        rows.append(row)
+    rows.append([Btn("✏️ Custom Amount", callback_data="wallet_amt_custom")])
+    rows.append([Btn("◀️ Back", callback_data="wallet")])
+    return InlineKeyboardMarkup(rows)
+
+
+def wallet_pay_methods_kb(methods: list) -> InlineKeyboardMarkup:
+    """Wallet payment methods selection."""
+    rows = []
+    for m in methods:
+        emoji = m.get("emoji", "💳")
+        rows.append([Btn(f"{emoji} {m['name']}", callback_data=f"wallet_pay:{m['id']}")])
+    rows.append([Btn("◀️ Back", callback_data="wallet")])
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_topups_kb(topups: list, currency: str) -> InlineKeyboardMarkup:
+    """Admin topups list."""
+    rows = []
+    for t in topups:
+        tid = t["id"]
+        amt = int(t["amount"]) if t["amount"] == int(t["amount"]) else t["amount"]
+        rows.append([Btn(f"⏳ #{tid} — {currency} {amt} — User {t['user_id']}", callback_data=f"adm_topup:{tid}")])
+    if not topups:
+        rows.append([Btn("✅ No pending top-ups", callback_data="noop")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_topup_detail_kb(topup_id: int) -> InlineKeyboardMarkup:
+    """Admin topup detail actions."""
+    return InlineKeyboardMarkup([
+        [
+            Btn("✅ Approve", callback_data=f"adm_topup_approve:{topup_id}"),
+            Btn("❌ Reject", callback_data=f"adm_topup_reject:{topup_id}"),
+        ],
+        [Btn("◀️ Top-Ups", callback_data="adm_topups")],
     ])

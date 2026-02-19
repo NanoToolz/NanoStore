@@ -180,6 +180,18 @@ async def init_db() -> None:
             details     TEXT DEFAULT '',
             created_at  TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS wallet_topups (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            amount          REAL NOT NULL,
+            method_id       INTEGER DEFAULT NULL,
+            proof_file_id   TEXT DEFAULT NULL,
+            status          TEXT DEFAULT 'pending',
+            admin_note      TEXT DEFAULT NULL,
+            reviewed_by     INTEGER DEFAULT NULL,
+            created_at      TEXT DEFAULT (datetime('now'))
+        );
     """)
 
     # Default settings
@@ -189,6 +201,10 @@ async def init_db() -> None:
         "welcome_text": "Welcome to NanoStore!",
         "welcome_image_id": "",
         "min_order": "0",
+        "topup_enabled": "on",
+        "topup_min_amount": "100",
+        "topup_max_amount": "10000",
+        "topup_bonus_percent": "0",
     }
     for key, value in defaults.items():
         await db.execute(
@@ -953,6 +969,68 @@ async def add_action_log(
     await db.commit()
 
 
+# ======================== WALLET TOPUPS ========================
+
+async def create_topup(user_id: int, amount: float, method_id: int) -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "INSERT INTO wallet_topups (user_id, amount, method_id) VALUES (?, ?, ?)",
+        (user_id, amount, method_id),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+async def get_topup(topup_id: int) -> Optional[dict]:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM wallet_topups WHERE id = ?", (topup_id,)
+    )
+    return _row_to_dict(await cur.fetchone())
+
+
+async def get_pending_topups() -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM wallet_topups WHERE status = 'pending' ORDER BY created_at DESC"
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_user_topups(user_id: int, limit: int = 10) -> list:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM wallet_topups WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (user_id, limit),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def update_topup(topup_id: int, **kwargs) -> None:
+    db = await get_db()
+    fields = []
+    values = []
+    for k, v in kwargs.items():
+        fields.append(f"{k} = ?")
+        values.append(v)
+    if not fields:
+        return
+    values.append(topup_id)
+    await db.execute(
+        f"UPDATE wallet_topups SET {', '.join(fields)} WHERE id = ?", values
+    )
+    await db.commit()
+
+
+async def get_pending_topup_count() -> int:
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM wallet_topups WHERE status = 'pending'"
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
 # ======================== DASHBOARD STATS ========================
 
 async def get_dashboard_stats() -> dict:
@@ -985,6 +1063,11 @@ async def get_dashboard_stats() -> dict:
     )
     tickets_row = await tickets.fetchone()
 
+    topups = await db.execute(
+        "SELECT COUNT(*) as c FROM wallet_topups WHERE status = 'pending'",
+    )
+    topups_row = await topups.fetchone()
+
     return {
         "users": users_row["c"],
         "categories": cats_row["c"],
@@ -993,4 +1076,5 @@ async def get_dashboard_stats() -> dict:
         "revenue": rev_row["r"],
         "pending_proofs": proofs_row["c"],
         "open_tickets": tickets_row["c"],
+        "pending_topups": topups_row["c"],
     }
