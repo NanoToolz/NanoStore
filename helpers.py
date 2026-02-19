@@ -91,14 +91,22 @@ async def render_screen(
     
     # 4. Image exists - send photo with caption
     try:
-        # Delete previous message ONLY if explicitly requested
-        if query and delete_prev:
+        # For callbacks, try to edit first (if message already has photo)
+        if query:
+            # Try to edit caption if message already has a photo
             try:
-                await query.message.delete()
-            except Exception:
+                await query.message.edit_caption(
+                    caption=text,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+                return
+            except Exception as edit_err:
+                # Edit failed - will send new message below
+                # DO NOT delete the old message (per HARD RULE)
                 pass
         
-        # Send photo with caption and buttons (ONE message)
+        # Send new photo message (for direct messages or when edit fails)
         await bot.send_photo(
             chat_id=chat_id,
             photo=image_id,
