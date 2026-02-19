@@ -85,6 +85,7 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Send welcome message — with image if configured, else plain text.
 
     Now includes user profile summary (ID, username, orders, balance).
+    Uses render_screen helper for consistent image handling.
     """
     user = update.effective_user
     is_admin = user.id == ADMIN_ID
@@ -105,37 +106,45 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"💳 Balance: <b>{currency} {balance}</b>\n\n"
     )
 
+    # Check if restart notification is enabled for users
+    restart_notify = await get_setting("restart_notify_users", "off")
+    last_restart = await get_setting("last_restart_at", "")
+    restart_notice = ""
+    if restart_notify == "on" and last_restart:
+        restart_notice = f"ℹ️ <i>Bot was restarted recently ({last_restart})</i>\n\n"
+
     if custom_msg:
-        text = custom_msg + "\n\n" + profile_block + "👇 Choose an option:"
+        text = custom_msg + "\n\n" + profile_block + restart_notice + "👇 Choose an option:"
     else:
         text = (
             f"🛍️ <b>Welcome to {html_escape(store_name)}!</b>\n\n"
             + profile_block +
+            restart_notice +
             "Your premium digital product marketplace.\n"
             "📦 eBooks, Templates, Courses, Software & more!\n\n"
             "👇 Choose an option:"
         )
 
     kb = main_menu_kb(is_admin=is_admin)
-    welcome_image_id = await get_setting("welcome_image_id", "")
 
-    if welcome_image_id:
-        try:
-            await update.message.reply_photo(
-                photo=welcome_image_id,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=kb,
-            )
-            return
-        except Exception as e:
-            logger.warning("Welcome image failed: %s", e)
-
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+    # Use render_screen helper for consistent image handling
+    from helpers import render_screen
+    await render_screen(
+        message=update.message,
+        bot=context.bot,
+        chat_id=update.message.chat_id,
+        text=text,
+        reply_markup=kb,
+        image_setting_key="welcome_image_id"
+    )
 
 
 async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Return to main menu — clears any active conversation state."""
+    """Return to main menu — clears any active conversation state.
+    
+    This is the MAIN MENU screen (not welcome splash).
+    Uses safe_edit to avoid deleting messages.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -147,9 +156,12 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data.pop("temp", None)
 
     text = (
-        f"🏠 <b>{html_escape(store_name)}</b>\n\n"
-        f"Welcome back, {html_escape(user.first_name)}! 👋"
+        f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n\n"
+        f"Welcome back, {html_escape(user.first_name)}! 👋\n\n"
+        "Choose an option below:"
     )
+    
+    # Use safe_edit to avoid deleting the message
     await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))
 
 

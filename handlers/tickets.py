@@ -28,7 +28,10 @@ TICKETS_PER_PAGE: int = 10
 # ══════════════════ USER: CREATE TICKET ══════════════════
 
 async def support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show support menu."""
+    """Show support menu.
+    
+    Uses render_screen with support_image_id.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -54,7 +57,16 @@ async def support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     rows.append([Btn("📦 My Tickets", callback_data="my_tickets")])
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
 
-    await safe_edit(query, text, reply_markup=InlineKeyboardMarkup(rows))
+    # Use render_screen with support_image_id
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=context.bot,
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(rows),
+        image_setting_key="support_image_id"
+    )
 
 
 async def ticket_new_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

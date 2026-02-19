@@ -1,5 +1,6 @@
 """NanoStore Telegram Bot — main entry point."""
 
+import asyncio
 import logging
 import traceback
 from html import escape
@@ -132,6 +133,12 @@ from handlers.admin import (
     admin_settings_handler,
     admin_set_handler,
     admin_welcome_image_handler,
+    admin_img_panel_handler,
+    admin_img_set_handler,
+    admin_img_clear_handler,
+    admin_img_toggle_handler,
+    admin_txt_set_handler,
+    admin_txt_clear_handler,
     admin_fj_handler,
     admin_fj_add_handler,
     admin_fj_del_handler,
@@ -147,9 +154,78 @@ logger = logging.getLogger(__name__)
 
 
 async def post_init(application: Application) -> None:
-    """Initialize database after application starts."""
+    """Initialize database after application starts and notify admin."""
+    import sys
+    import subprocess
+    from datetime import datetime
+    from database import get_setting, set_setting
+    
     await init_db()
     logger.info("Bot initialized. ADMIN_ID=%s", ADMIN_ID)
+    
+    # Get bot name
+    bot_name = await get_setting("bot_name", "NanoStore")
+    
+    # Get git info
+    try:
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        branch = "unknown"
+    
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        commit = "unknown"
+    
+    # Get Python version
+    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    
+    # Get current timestamp
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Store restart timestamp
+    await set_setting("last_restart_at", now)
+    
+    # Send detailed restart notification to admin with auto-delete after 60s
+    try:
+        admin_msg = (
+            "✅ <b>Bot Restarted Successfully</b>\n\n"
+            f"<b>Bot:</b> {bot_name}\n"
+            f"<b>Branch:</b> {branch}\n"
+            f"<b>Commit:</b> <code>{commit}</code>\n"
+            f"<b>Time:</b> {now}\n"
+            f"<b>Python:</b> {py_version}\n"
+            f"<b>DB:</b> OK\n\n"
+            "<i>This message will auto-delete in 60 seconds.</i>"
+        )
+        msg = await application.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_msg,
+            parse_mode="HTML"
+        )
+        logger.info("Sent restart notification to admin")
+        
+        # Schedule deletion after 60 seconds using application.create_task
+        async def _delete_restart_msg():
+            try:
+                await asyncio.sleep(60)
+                await application.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id)
+                logger.info(f"Auto-deleted restart notification (msg={msg.message_id})")
+            except Exception as e:
+                logger.warning(f"Failed to auto-delete restart notification: {e}")
+        
+        application.create_task(_delete_restart_msg())
+        
+    except Exception as e:
+        logger.warning(f"Failed to send restart notification: {e}")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -367,6 +443,12 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(admin_settings_handler, pattern=r"^adm_settings$"))
     app.add_handler(CallbackQueryHandler(admin_set_handler, pattern=r"^adm_set:.+$"))
     app.add_handler(CallbackQueryHandler(admin_welcome_image_handler, pattern=r"^adm_welcome_image$"))
+    app.add_handler(CallbackQueryHandler(admin_img_panel_handler, pattern=r"^adm_img_panel$"))
+    app.add_handler(CallbackQueryHandler(admin_img_set_handler, pattern=r"^adm_img_set:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_img_clear_handler, pattern=r"^adm_img_clear:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_img_toggle_handler, pattern=r"^adm_img_toggle$"))
+    app.add_handler(CallbackQueryHandler(admin_txt_set_handler, pattern=r"^adm_txt_set:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_txt_clear_handler, pattern=r"^adm_txt_clear:.+$"))
 
     # ---- Admin: Force Join ----
     app.add_handler(CallbackQueryHandler(admin_fj_handler, pattern=r"^adm_fj$"))
@@ -400,6 +482,8 @@ def register_handlers(app: Application) -> None:
 
 def main() -> None:
     """Start the bot."""
+    import asyncio
+    
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
@@ -411,6 +495,12 @@ def main() -> None:
         return
 
     logger.info("Starting NanoStore Bot...")
+
+    # Fix for Python 3.14+ event loop issue
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
     app = (
         Application.builder()

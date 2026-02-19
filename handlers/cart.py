@@ -28,7 +28,10 @@ async def cart_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _show_cart(query, user_id: int) -> None:
-    """Internal: render the cart view."""
+    """Internal: render the cart view.
+    
+    Uses render_screen with cart_image_id.
+    """
     items = await get_cart(user_id)
     currency = await get_setting("currency", "Rs")
 
@@ -61,7 +64,16 @@ async def _show_cart(query, user_id: int) -> None:
     total_display = int(total) if total == int(total) else f"{total:.2f}"
     text += f"{separator()}\n💰 <b>Total: {currency} {total_display}</b>"
 
-    await safe_edit(query, text, reply_markup=cart_kb(items))
+    # Use render_screen with cart_image_id
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=query.message.get_bot(),
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=cart_kb(items),
+        image_setting_key="cart_image_id"
+    )
 
 
 async def cart_inc_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

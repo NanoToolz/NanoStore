@@ -513,7 +513,10 @@ async def orders_page_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def _show_orders_page(query, user_id: int, page: int = 1) -> None:
-    """Internal: render orders list page."""
+    """Internal: render orders list page.
+    
+    Uses render_screen with orders_image_id.
+    """
     offset = (page - 1) * ORDERS_PER_PAGE
     user_orders = await get_user_orders(user_id, limit=ORDERS_PER_PAGE, offset=offset)
     currency = await get_setting("currency", "Rs")
@@ -528,9 +531,15 @@ async def _show_orders_page(query, user_id: int, page: int = 1) -> None:
     total_orders = await get_user_order_count(user_id)
     text += f"\n📊 Total: {total_orders} orders"
 
-    await safe_edit(
-        query, text,
-        reply_markup=orders_kb(user_orders, currency=currency, page=page, per_page=ORDERS_PER_PAGE)
+    # Use render_screen with orders_image_id
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=query.message.get_bot(),
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=orders_kb(user_orders, currency=currency, page=page, per_page=ORDERS_PER_PAGE),
+        image_setting_key="orders_image_id"
     )
 
 

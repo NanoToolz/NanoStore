@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 # ════════════════════════ WALLET MAIN ════════════════════════
 
 async def wallet_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show wallet balance and options."""
+    """Show wallet balance and options.
+    
+    Uses render_screen with wallet_image_id.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -43,7 +46,17 @@ async def wallet_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"💰 Balance: <b>{currency} {bal_display}</b>\n\n"
         "Use your wallet to pay for orders or top-up anytime."
     )
-    await safe_edit(query, text, reply_markup=wallet_kb())
+    
+    # Use render_screen with wallet_image_id
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=context.bot,
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=wallet_kb(),
+        image_setting_key="wallet_image_id"
+    )
 
 
 # ════════════════════════ TOP-UP ════════════════════════

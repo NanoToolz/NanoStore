@@ -536,7 +536,7 @@ def admin_settings_kb() -> InlineKeyboardMarkup:
         ],
         [
             Btn("👋 Welcome", callback_data="adm_set:welcome_text"),
-            Btn("🖼️ Welcome Img", callback_data="adm_welcome_image"),
+            Btn("🧩 Screen Content", callback_data="adm_img_panel"),
         ],
         [
             Btn("🛒 Min Order", callback_data="adm_set:min_order"),
@@ -559,6 +559,96 @@ def admin_settings_kb() -> InlineKeyboardMarkup:
             Btn("💳 Pay Info", callback_data="adm_set:payment_instructions"),
         ],
         [Btn("◀️ Admin Panel", callback_data="admin")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_images_kb(statuses: dict) -> InlineKeyboardMarkup:
+    """Admin screen content panel keyboard showing image AND text status for each screen.
+    
+    Args:
+        statuses: Dict mapping setting keys to bool (True = set, False = not set)
+    """
+    def img_status(key: str) -> str:
+        return "✅" if statuses.get(key, False) else "❌"
+    
+    def txt_status(key: str) -> str:
+        return "✅" if statuses.get(key, False) else "❌"
+    
+    rows = [
+        [Btn(f"📱 Welcome: {img_status('welcome_image_id')} Image | {txt_status('welcome_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:welcome_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:welcome_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:welcome_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:welcome_text"),
+        ],
+        
+        [Btn(f"🛍️ Shop: {img_status('shop_image_id')} Image | {txt_status('shop_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:shop_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:shop_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:shop_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:shop_text"),
+        ],
+        
+        [Btn(f"🛒 Cart: {img_status('cart_image_id')} Image | {txt_status('cart_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:cart_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:cart_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:cart_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:cart_text"),
+        ],
+        
+        [Btn(f"📦 Orders: {img_status('orders_image_id')} Image | {txt_status('orders_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:orders_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:orders_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:orders_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:orders_text"),
+        ],
+        
+        [Btn(f"💳 Wallet: {img_status('wallet_image_id')} Image | {txt_status('wallet_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:wallet_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:wallet_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:wallet_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:wallet_text"),
+        ],
+        
+        [Btn(f"🎫 Support: {img_status('support_image_id')} Image | {txt_status('support_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:support_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:support_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:support_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:support_text"),
+        ],
+        
+        [Btn(f"⚙️ Admin Panel: {img_status('admin_panel_image_id')} Image | {txt_status('admin_panel_text')} Text", callback_data="noop")],
+        [
+            Btn("🖼 Set Image", callback_data="adm_img_set:admin_panel_image_id"),
+            Btn("🗑 Clear", callback_data="adm_img_clear:admin_panel_image_id"),
+        ],
+        [
+            Btn("✍️ Edit Text", callback_data="adm_txt_set:admin_panel_text"),
+            Btn("♻️ Reset Text", callback_data="adm_txt_clear:admin_panel_text"),
+        ],
+        
+        [Btn("━━━━━━━━━━━━━━━━━━━", callback_data="noop")],
+        [Btn("🔧 Toggle Images On/Off", callback_data="adm_img_toggle")],
+        [Btn("◀️ Settings", callback_data="adm_settings")],
     ]
     return InlineKeyboardMarkup(rows)
 
