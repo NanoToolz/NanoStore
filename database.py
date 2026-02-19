@@ -200,11 +200,19 @@ async def init_db() -> None:
         "bot_name": "NanoStore",
         "welcome_text": "Welcome to NanoStore!",
         "welcome_image_id": "",
+        "ui_images_enabled": "on",
+        "shop_image_id": "",
+        "cart_image_id": "",
+        "orders_image_id": "",
+        "wallet_image_id": "",
+        "support_image_id": "",
+        "admin_panel_image_id": "",
         "min_order": "0",
         "topup_enabled": "on",
         "topup_min_amount": "100",
         "topup_max_amount": "10000",
         "topup_bonus_percent": "0",
+        "auto_delete": "0",
     }
     for key, value in defaults.items():
         await db.execute(
