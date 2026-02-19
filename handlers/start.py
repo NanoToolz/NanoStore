@@ -106,12 +106,20 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"💳 Balance: <b>{currency} {balance}</b>\n\n"
     )
 
+    # Check if restart notification is enabled for users
+    restart_notify = await get_setting("restart_notify_users", "off")
+    last_restart = await get_setting("last_restart_at", "")
+    restart_notice = ""
+    if restart_notify == "on" and last_restart:
+        restart_notice = f"ℹ️ <i>Bot was restarted recently ({last_restart})</i>\n\n"
+
     if custom_msg:
-        text = custom_msg + "\n\n" + profile_block + "👇 Choose an option:"
+        text = custom_msg + "\n\n" + profile_block + restart_notice + "👇 Choose an option:"
     else:
         text = (
             f"🛍️ <b>Welcome to {html_escape(store_name)}!</b>\n\n"
             + profile_block +
+            restart_notice +
             "Your premium digital product marketplace.\n"
             "📦 eBooks, Templates, Courses, Software & more!\n\n"
             "👇 Choose an option:"

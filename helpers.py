@@ -21,7 +21,7 @@ async def render_screen(
     reply_markup=None,
     image_setting_key: str,
     parse_mode: str = "HTML",
-    delete_prev: bool = True
+    delete_prev: bool = False
 ) -> None:
     """Render a screen with optional image support.
 
@@ -42,7 +42,7 @@ async def render_screen(
         reply_markup: InlineKeyboardMarkup (can be None)
         image_setting_key: Settings key for this screen's image (e.g., "shop_image_id")
         parse_mode: Parse mode for text (default: "HTML")
-        delete_prev: Whether to delete previous message if query exists (default: True)
+        delete_prev: Whether to delete previous message if query exists (default: False)
     
     HARD RULE: When image exists and enabled, use send_photo with caption+buttons in ONE message.
     """
@@ -83,7 +83,7 @@ async def render_screen(
     
     # 4. Image exists - send photo with caption
     try:
-        # Delete previous message if it's a callback query
+        # Delete previous message ONLY if explicitly requested
         if query and delete_prev:
             try:
                 await query.message.delete()

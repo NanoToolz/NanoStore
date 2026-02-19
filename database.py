@@ -213,6 +213,8 @@ async def init_db() -> None:
         "topup_max_amount": "10000",
         "topup_bonus_percent": "0",
         "auto_delete": "0",
+        "restart_notify_users": "off",
+        "last_restart_at": "",
     }
     for key, value in defaults.items():
         await db.execute(

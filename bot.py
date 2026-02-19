@@ -152,15 +152,59 @@ logger = logging.getLogger(__name__)
 
 async def post_init(application: Application) -> None:
     """Initialize database after application starts and notify admin."""
+    import sys
+    import subprocess
+    from datetime import datetime
+    from database import get_setting, set_setting
+    
     await init_db()
     logger.info("Bot initialized. ADMIN_ID=%s", ADMIN_ID)
     
-    # Send restart notification to admin
+    # Get bot name
+    bot_name = await get_setting("bot_name", "NanoStore")
+    
+    # Get git info
     try:
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        branch = "unknown"
+    
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        commit = "unknown"
+    
+    # Get Python version
+    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    
+    # Get current timestamp
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Store restart timestamp
+    await set_setting("last_restart_at", now)
+    
+    # Send detailed restart notification to admin
+    try:
+        admin_msg = (
+            "✅ <b>Bot Restarted Successfully</b>\n\n"
+            f"<b>Bot:</b> {bot_name}\n"
+            f"<b>Branch:</b> {branch}\n"
+            f"<b>Commit:</b> <code>{commit}</code>\n"
+            f"<b>Time:</b> {now}\n"
+            f"<b>Python:</b> {py_version}\n"
+            f"<b>DB:</b> OK"
+        )
         await application.bot.send_message(
             chat_id=ADMIN_ID,
-            text="✅ <b>Bot Restarted Successfully</b>\n\n"
-                 "All systems operational.",
+            text=admin_msg,
             parse_mode="HTML"
         )
         logger.info("Sent restart notification to admin")
