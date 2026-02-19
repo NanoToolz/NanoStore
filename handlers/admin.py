@@ -59,6 +59,10 @@ def _is_admin(user_id: int) -> bool:
 # ════════════════════════ MAIN ADMIN PANEL ════════════════════════
 
 async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin panel main screen.
+    
+    Uses render_screen with admin_panel_image_id.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -82,10 +86,21 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"💰 Revenue: <b>{currency} {revenue}</b>  |  ⏳ Proofs: <b>{stats['pending_proofs']}</b>\n"
         f"🎫 Tickets: <b>{stats['open_tickets']}</b>  |  💳 Top-Ups: <b>{stats['pending_topups']}</b>"
     )
-    await safe_edit(query, text, reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]))
+    
+    # Use render_screen with admin_panel_image_id
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=context.bot,
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]),
+        image_setting_key="admin_panel_image_id"
+    )
 
 
 async def back_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Back to admin panel - uses same render as admin_handler."""
     await admin_handler(update, context)
 
 

@@ -85,6 +85,7 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Send welcome message — with image if configured, else plain text.
 
     Now includes user profile summary (ID, username, orders, balance).
+    Uses render_screen helper for consistent image handling.
     """
     user = update.effective_user
     is_admin = user.id == ADMIN_ID
@@ -117,25 +118,24 @@ async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
     kb = main_menu_kb(is_admin=is_admin)
-    welcome_image_id = await get_setting("welcome_image_id", "")
 
-    if welcome_image_id:
-        try:
-            await update.message.reply_photo(
-                photo=welcome_image_id,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=kb,
-            )
-            return
-        except Exception as e:
-            logger.warning("Welcome image failed: %s", e)
-
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+    # Use render_screen helper for consistent image handling
+    from helpers import render_screen
+    await render_screen(
+        message=update.message,
+        bot=context.bot,
+        chat_id=update.message.chat_id,
+        text=text,
+        reply_markup=kb,
+        image_setting_key="welcome_image_id"
+    )
 
 
 async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Return to main menu — clears any active conversation state."""
+    """Return to main menu — clears any active conversation state.
+    
+    Uses render_screen with welcome_image_id for consistent main menu experience.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -150,7 +150,17 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"🏠 <b>{html_escape(store_name)}</b>\n\n"
         f"Welcome back, {html_escape(user.first_name)}! 👋"
     )
-    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))
+    
+    # Use render_screen for consistent main menu experience
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=context.bot,
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=main_menu_kb(is_admin=is_admin),
+        image_setting_key="welcome_image_id"
+    )
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

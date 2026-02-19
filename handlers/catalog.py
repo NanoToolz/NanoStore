@@ -32,9 +32,7 @@ PER_PAGE: int = 20
 async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show all active categories.
 
-    Now supports an optional Shop banner image.
-    If `shop_image_id` is set in settings, it is used.
-    Otherwise falls back to `welcome_image_id` (if any).
+    Uses render_screen with shop_image_id (NO fallback to welcome_image_id).
     """
     query = update.callback_query
     await query.answer()
@@ -53,28 +51,16 @@ async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     kb = categories_kb(cats)
 
-    # Prefer dedicated shop banner; fall back to welcome image
-    shop_image_id = await get_setting("shop_image_id", "")
-    if not shop_image_id:
-        shop_image_id = await get_setting("welcome_image_id", "")
-
-    if shop_image_id:
-        try:
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            await query.message.chat.send_photo(
-                photo=shop_image_id,
-                caption=text,
-                parse_mode="HTML",
-                reply_markup=kb,
-            )
-            return
-        except Exception as e:
-            logger.warning("Shop image failed: %s", e)
-
-    await safe_edit(query, text, reply_markup=kb)
+    # Use render_screen with shop_image_id (NO fallback to welcome)
+    from helpers import render_screen
+    await render_screen(
+        query=query,
+        bot=context.bot,
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=kb,
+        image_setting_key="shop_image_id"
+    )
 
 
 async def stock_overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
