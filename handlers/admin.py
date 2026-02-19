@@ -79,9 +79,9 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"{separator()}\n"
         f"👥 Users: <b>{stats['users']}</b>  |  📦 Orders: <b>{stats['orders']}</b>\n"
         f"💰 Revenue: <b>{currency} {revenue}</b>  |  ⏳ Proofs: <b>{stats['pending_proofs']}</b>\n"
-        f"🎫 Tickets: <b>{stats['open_tickets']}</b>"
+        f"🎫 Tickets: <b>{stats['open_tickets']}</b>  |  💳 Top-Ups: <b>{stats['pending_topups']}</b>"
     )
-    await safe_edit(query, text, reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"]))
+    await safe_edit(query, text, reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]))
 
 
 async def back_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -110,6 +110,7 @@ async def admin_dashboard_handler(update: Update, context: ContextTypes.DEFAULT_
         f"🛒 <b>Total Orders:</b> {stats['orders']}\n"
         f"💰 <b>Revenue:</b> {currency} {revenue}\n"
         f"⏳ <b>Pending Proofs:</b> {stats['pending_proofs']}\n"
+        f"💳 <b>Pending Top-Ups:</b> {stats['pending_topups']}\n"
         f"🎫 <b>Open Tickets:</b> {stats['open_tickets']}"
     )
     await safe_edit(query, text, reply_markup=back_kb("admin"))
@@ -1248,6 +1249,140 @@ async def admin_broadcast_confirm_handler(update: Update, context: ContextTypes.
     await add_action_log("broadcast", ADMIN_ID, f"Sent: {sent}, Failed: {failed}")
 
 
+# ════════════════════════ WALLET TOP-UPS ════════════════════════
+
+async def admin_topups_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    from database import get_pending_topups
+    topups = await get_pending_topups()
+    currency = await get_setting("currency", "Rs")
+    from keyboards import admin_topups_kb
+    await safe_edit(
+        query,
+        f"💳 <b>Pending Top-Ups</b>\n{separator()}\n\n⏳ {len(topups)} awaiting review",
+        reply_markup=admin_topups_kb(topups, currency),
+    )
+
+
+async def admin_topup_detail_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    from database import get_topup
+    topup_id = int(query.data.split(":")[1])
+    topup = await get_topup(topup_id)
+    if not topup:
+        await safe_edit(query, "❌ Top-up not found.", reply_markup=back_kb("adm_topups"))
+        return
+
+    user = await get_user(topup["user_id"])
+    method = await get_payment_method(topup["method_id"]) if topup.get("method_id") else None
+    currency = await get_setting("currency", "Rs")
+    amt = int(topup["amount"]) if topup["amount"] == int(topup["amount"]) else topup["amount"]
+
+    text = (
+        f"💳 <b>Top-Up #{topup_id}</b>\n"
+        f"{separator()}\n\n"
+        f"👤 {html_escape(user['full_name'] if user else 'N/A')} (<code>{topup['user_id']}</code>)\n"
+        f"💰 Amount: {currency} {amt}\n"
+        f"💳 Method: {html_escape(method['name'] if method else 'N/A')}\n"
+        f"📊 Status: {topup['status']}\n"
+        f"📅 {str(topup.get('created_at', 'N/A'))[:16]}"
+    )
+
+    from keyboards import admin_topup_detail_kb
+    if topup.get("proof_file_id"):
+        try:
+            await query.message.chat.send_photo(
+                photo=topup["proof_file_id"],
+                caption=text,
+                parse_mode="HTML",
+                reply_markup=admin_topup_detail_kb(topup_id),
+            )
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            return
+        except Exception as e:
+            logger.warning("Failed to send topup proof photo: %s", e)
+
+    await safe_edit(query, text, reply_markup=admin_topup_detail_kb(topup_id))
+
+
+async def admin_topup_approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    from database import get_topup, update_topup, update_user_balance
+    topup_id = int(query.data.split(":")[1])
+    topup = await get_topup(topup_id)
+    if not topup:
+        await query.answer("❌ Top-up not found.", show_alert=True)
+        return
+
+    bonus_percent = float(await get_setting("topup_bonus_percent", "0"))
+    credit = topup["amount"] + (topup["amount"] * bonus_percent / 100)
+
+    await update_topup(topup_id, status="approved", reviewed_by=ADMIN_ID)
+    await update_user_balance(topup["user_id"], credit)
+    await add_action_log("topup_approved", ADMIN_ID, f"Top-Up #{topup_id}, Amount: {credit}")
+
+    currency = await get_setting("currency", "Rs")
+    amt_display = int(credit) if credit == int(credit) else f"{credit:.2f}"
+    user_balance = await get_user_balance(topup["user_id"])
+    bal_display = int(user_balance) if user_balance == int(user_balance) else f"{user_balance:.2f}"
+
+    try:
+        await context.bot.send_message(
+            chat_id=topup["user_id"],
+            text=(
+                f"✅ <b>Top-Up Approved!</b>\n"
+                f"{separator()}\n\n"
+                f"💰 Credited: <b>{currency} {amt_display}</b>\n"
+                f"💳 New Balance: <b>{currency} {bal_display}</b>\n\n"
+                "Thank you! Your wallet has been topped up. 🎉"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.warning("Failed to notify user: %s", e)
+
+    await query.answer("✅ Top-up approved!", show_alert=True)
+
+    from database import get_pending_topups
+    from keyboards import admin_topups_kb
+    topups = await get_pending_topups()
+    await safe_edit(
+        query,
+        f"💳 <b>Pending Top-Ups</b>\n{separator()}\n\n⏳ {len(topups)} awaiting review",
+        reply_markup=admin_topups_kb(topups, currency),
+    )
+
+
+async def admin_topup_reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    topup_id = int(query.data.split(":")[1])
+    context.user_data["state"] = f"adm_topup_reject:{topup_id}"
+    await safe_edit(
+        query,
+        f"❌ <b>Reject Top-Up #{topup_id}</b>\n{separator()}\n\n📝 Send rejection reason:",
+        reply_markup=back_kb("adm_topups"),
+    )
+
+
 # ════════════════════════ ADMIN TEXT ROUTER ════════════════════════
 
 async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1528,6 +1663,31 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 pass
             await add_action_log("proof_rejected", ADMIN_ID, f"#{proof_id}: {text}")
         await update.message.reply_text("✅ Proof rejected.", parse_mode="HTML")
+        return
+
+    # ── Top-Up: rejection reason ──
+    if state.startswith("adm_topup_reject:"):
+        from database import get_topup, update_topup
+        topup_id = int(state.split(":")[1])
+        context.user_data.pop("state", None)
+        topup = await get_topup(topup_id)
+        if topup:
+            await update_topup(topup_id, status="rejected", reviewed_by=ADMIN_ID, admin_note=text)
+            try:
+                await context.bot.send_message(
+                    chat_id=topup["user_id"],
+                    text=(
+                        f"❌ <b>Top-Up Rejected</b>\n{separator()}\n\n"
+                        f"Top-Up ID: #{topup_id}\n"
+                        f"Reason: {html_escape(text)}\n\n"
+                        "Please re-submit with correct payment proof."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            await add_action_log("topup_rejected", ADMIN_ID, f"#{topup_id}: {text}")
+        await update.message.reply_text("✅ Top-up rejected.", parse_mode="HTML")
         return
 
     # ── Product FAQ: add ──
