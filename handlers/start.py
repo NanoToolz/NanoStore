@@ -11,7 +11,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
-from database import ensure_user, is_user_banned, get_setting, add_action_log
+from database import ensure_user, is_user_banned, get_setting, add_action_log, get_user_order_count, get_user_balance
 from helpers import (
     safe_edit, check_force_join, notify_log_channel,
     html_escape, separator, auto_delete, send_typing,
@@ -82,17 +82,35 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send welcome message — with image if configured, else plain text."""
+    """Send welcome message — with image if configured, else plain text.
+
+    Now includes user profile summary (ID, username, orders, balance).
+    """
     user = update.effective_user
     is_admin = user.id == ADMIN_ID
     store_name = await get_setting("bot_name", "NanoStore")
 
+    # Base welcome text (custom or default)
     custom_msg = await get_setting("welcome_text", "")
+
+    currency = await get_setting("currency", "Rs")
+    orders_count = await get_user_order_count(user.id)
+    balance = await get_user_balance(user.id)
+
+    profile_block = (
+        f"👤 <b>Profile</b>\n"
+        f"🆔 <code>{user.id}</code>\n"
+        f"📎 @{html_escape(user.username or 'N/A')}\n"
+        f"🛒 Orders: <b>{orders_count}</b>\n"
+        f"💳 Balance: <b>{currency} {balance}</b>\n\n"
+    )
+
     if custom_msg:
-        text = custom_msg
+        text = custom_msg + "\n\n" + profile_block + "👇 Choose an option:"
     else:
         text = (
             f"🛍️ <b>Welcome to {html_escape(store_name)}!</b>\n\n"
+            + profile_block +
             "Your premium digital product marketplace.\n"
             "📦 eBooks, Templates, Courses, Software & more!\n\n"
             "👇 Choose an option:"

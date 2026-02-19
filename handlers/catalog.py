@@ -49,6 +49,38 @@ async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await safe_edit(query, text, reply_markup=categories_kb(cats))
 
 
+async def stock_overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show stock overview for all products across categories."""
+    query = update.callback_query
+    await query.answer()
+
+    cats = await get_active_categories()
+    if not cats:
+        await safe_edit(query, "❌ No categories available.", reply_markup=back_kb("shop"))
+        return
+
+    currency = await get_setting("currency", "Rs")
+
+    lines = ["📊 <b>Stock Overview</b>", separator(), ""]
+    for cat in cats:
+        cat_name = f"{cat.get('emoji', '📂')} {cat['name']}"
+        products = await get_products_by_category(cat["id"], limit=200)
+        if not products:
+            continue
+        lines.append(f"📂 <b>{html_escape(cat_name)}</b>")
+        for p in products:
+            stock_text = format_stock(p.get("stock", -1))
+            price = p["price"]
+            price_display = int(price) if price == int(price) else price
+            lines.append(
+                f"• {html_escape(p['name'])} — {currency} {price_display} | {stock_text}"
+            )
+        lines.append("")
+
+    text = "\n".join(lines) if lines else "❌ No products found."
+    await safe_edit(query, text, reply_markup=back_kb("shop"))
+
+
 async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show products in a category (page 1)."""
     query = update.callback_query

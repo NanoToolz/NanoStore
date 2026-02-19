@@ -35,11 +35,20 @@ def back_kb(target: str) -> InlineKeyboardMarkup:
 # ════════════════════════ MAIN MENU ════════════════════════
 
 def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """Main menu keyboard."""
+    """Main menu keyboard.
+
+    Layout (user request):
+    Row 1: 🛍️ Shop
+    Row 2: 🛒 Cart | 📦 My Orders
+    Row 3: 🎫 Support | ❓ Help
+    Row 4: 🔍 Search
+    Last (admin only): ⚙️ Admin Panel
+    """
     rows = [
-        [Btn("🛍️ Shop", callback_data="shop"), Btn("🔍 Search", callback_data="search")],
+        [Btn("🛍️ Shop", callback_data="shop")],
         [Btn("🛒 Cart", callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
         [Btn("🎫 Support", callback_data="support"), Btn("❓ Help", callback_data="help")],
+        [Btn("🔍 Search", callback_data="search")],
     ]
     if is_admin:
         rows.append([Btn("⚙️ Admin Panel", callback_data="admin")])
@@ -58,7 +67,7 @@ def force_join_kb(channels: list) -> InlineKeyboardMarkup:
 # ════════════════════════ CATALOG ════════════════════════
 
 def categories_kb(categories: list) -> InlineKeyboardMarkup:
-    """Categories grid (2 per row)."""
+    """Categories grid (2 per row) + stock overview button."""
     rows = []
     for i in range(0, len(categories), 2):
         row = []
@@ -66,6 +75,8 @@ def categories_kb(categories: list) -> InlineKeyboardMarkup:
             emoji = cat.get("emoji", "📁")
             row.append(Btn(f"{emoji} {cat['name']}", callback_data=f"cat:{cat['id']}"))
         rows.append(row)
+    # Stock overview button
+    rows.append([Btn("📊 Stock Overview", callback_data="stock_overview")])
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
     return InlineKeyboardMarkup(rows)
 
@@ -515,24 +526,28 @@ def admin_fj_kb(channels: list) -> InlineKeyboardMarkup:
 # ---- Admin: Settings ----
 
 def admin_settings_kb() -> InlineKeyboardMarkup:
-    """Admin settings keyboard with compact labels and welcome image option."""
+    """Admin settings keyboard with compact 2x style."""
     rows = [
         [
             Btn("🏪 Name", callback_data="adm_set:bot_name"),
             Btn("💰 Curr", callback_data="adm_set:currency"),
         ],
-        [Btn("👋 Welcome", callback_data="adm_set:welcome_text")],
-        [Btn("🖼️ Welcome Img", callback_data="adm_welcome_image")],
+        [
+            Btn("👋 Welcome", callback_data="adm_set:welcome_text"),
+            Btn("🖼️ Welcome Img", callback_data="adm_welcome_image"),
+        ],
         [
             Btn("🛒 Min Order", callback_data="adm_set:min_order"),
             Btn("🎁 Reward", callback_data="adm_set:daily_reward"),
         ],
-        [Btn("⏱️ Auto-Del", callback_data="adm_set:auto_delete")],
         [
+            Btn("⏱️ Auto-Del", callback_data="adm_set:auto_delete"),
             Btn("🔧 Maint", callback_data="adm_set:maintenance"),
-            Btn("📝 Maint Txt", callback_data="adm_set:maintenance_text"),
         ],
-        [Btn("💳 Pay Info", callback_data="adm_set:payment_instructions")],
+        [
+            Btn("📝 Maint Txt", callback_data="adm_set:maintenance_text"),
+            Btn("💳 Pay Info", callback_data="adm_set:payment_instructions"),
+        ],
         [Btn("◀️ Admin Panel", callback_data="admin")],
     ]
     return InlineKeyboardMarkup(rows)
