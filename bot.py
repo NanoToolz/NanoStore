@@ -1,5 +1,6 @@
 """NanoStore Telegram Bot — main entry point."""
 
+import asyncio
 import logging
 import traceback
 from html import escape
@@ -193,7 +194,7 @@ async def post_init(application: Application) -> None:
     # Store restart timestamp
     await set_setting("last_restart_at", now)
     
-    # Send detailed restart notification to admin
+    # Send detailed restart notification to admin with auto-delete after 60s
     try:
         admin_msg = (
             "✅ <b>Bot Restarted Successfully</b>\n\n"
@@ -202,14 +203,27 @@ async def post_init(application: Application) -> None:
             f"<b>Commit:</b> <code>{commit}</code>\n"
             f"<b>Time:</b> {now}\n"
             f"<b>Python:</b> {py_version}\n"
-            f"<b>DB:</b> OK"
+            f"<b>DB:</b> OK\n\n"
+            "<i>This message will auto-delete in 60 seconds.</i>"
         )
-        await application.bot.send_message(
+        msg = await application.bot.send_message(
             chat_id=ADMIN_ID,
             text=admin_msg,
             parse_mode="HTML"
         )
         logger.info("Sent restart notification to admin")
+        
+        # Schedule deletion after 60 seconds using application.create_task
+        async def _delete_restart_msg():
+            try:
+                await asyncio.sleep(60)
+                await application.bot.delete_message(chat_id=msg.chat_id, message_id=msg.message_id)
+                logger.info(f"Auto-deleted restart notification (msg={msg.message_id})")
+            except Exception as e:
+                logger.warning(f"Failed to auto-delete restart notification: {e}")
+        
+        application.create_task(_delete_restart_msg())
+        
     except Exception as e:
         logger.warning(f"Failed to send restart notification: {e}")
 
