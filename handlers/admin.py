@@ -9,6 +9,7 @@ Key improvements vs previous version:
 - All handlers use send_typing() for immediate feedback
 """
 
+import asyncio
 import json
 import logging
 from html import escape as html_escape
@@ -1197,7 +1198,12 @@ async def admin_img_set_handler(update: Update, context: ContextTypes.DEFAULT_TY
         "📸 Send a photo to use for this screen.\n\n"
         "<i>The photo will be shown with the screen text as a caption.</i>"
     )
+    
+    # Edit the message and store its message_id for later deletion
     await safe_edit(query, text, reply_markup=back_kb("adm_img_panel"))
+    
+    # Store prompt message_id so we can delete it after photo is received
+    context.user_data["adm_img_prompt_msg_id"] = query.message.message_id
 
 
 async def admin_img_clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1954,21 +1960,48 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         }
         screen_name = screen_names.get(key, key)
         
-        # Delete admin's photo message (best effort)
+        # 1. Delete admin's photo message (best effort)
         try:
             await update.message.delete()
-        except Exception:
-            pass
+            logger.info(f"Deleted admin photo message for {key}")
+        except Exception as e:
+            logger.warning(f"Failed to delete admin photo message for {key}: {e}")
         
-        # Send confirmation message
+        # 2. Delete the prompt message (the bot message that asked for photo)
+        prompt_msg_id = context.user_data.pop("adm_img_prompt_msg_id", None)
+        if prompt_msg_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=update.message.chat_id,
+                    message_id=prompt_msg_id
+                )
+                logger.info(f"Deleted prompt message for {key}")
+            except Exception as e:
+                logger.warning(f"Failed to delete prompt message for {key}: {e}")
+        
+        # 3. Send confirmation message
         msg = await update.message.chat.send_message(
             f"✅ <b>Image saved for {screen_name}!</b>\n\n"
             "The image will now appear on this screen for all users.",
             parse_mode="HTML"
         )
         
-        # Auto-delete confirmation after 7 seconds
-        await auto_delete(msg, delay=7)
+        # 4. Auto-delete confirmation after 7 seconds
+        try:
+            await auto_delete(msg, delay=7)
+            logger.info(f"Scheduled auto-delete for confirmation message (7s)")
+        except Exception as e:
+            logger.warning(f"Failed to schedule auto-delete for confirmation: {e}")
+            # Fallback: try direct deletion after sleep
+            try:
+                await asyncio.sleep(7)
+                await context.bot.delete_message(
+                    chat_id=msg.chat_id,
+                    message_id=msg.message_id
+                )
+                logger.info(f"Fallback deletion successful for confirmation")
+            except Exception as e2:
+                logger.warning(f"Fallback deletion also failed: {e2}")
         
         await add_action_log("image_set", ADMIN_ID, f"{key}: {file_id[:30]}")
         return
