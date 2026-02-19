@@ -1119,14 +1119,14 @@ async def admin_welcome_image_handler(update: Update, context: ContextTypes.DEFA
 # ════════════════════════ IMAGES PANEL (NEW) ════════════════════════
 
 async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show images panel with status for all 7 screen images."""
+    """Show screen content panel with image AND text status for all screens."""
     query = update.callback_query
     await query.answer()
     if not _is_admin(update.effective_user.id):
         return
 
-    # Get status for all image keys
-    keys = [
+    # Get status for all image AND text keys
+    image_keys = [
         "welcome_image_id",
         "shop_image_id",
         "cart_image_id",
@@ -1136,8 +1136,22 @@ async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_
         "admin_panel_image_id",
     ]
     
+    text_keys = [
+        "welcome_text",
+        "shop_text",
+        "cart_text",
+        "orders_text",
+        "wallet_text",
+        "support_text",
+        "admin_panel_text",
+    ]
+    
     statuses = {}
-    for key in keys:
+    for key in image_keys:
+        val = await get_setting(key, "")
+        statuses[key] = bool(val)
+    
+    for key in text_keys:
         val = await get_setting(key, "")
         statuses[key] = bool(val)
     
@@ -1145,12 +1159,12 @@ async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_
     toggle_status = "🟢 ON" if ui_enabled == "on" else "🔴 OFF"
     
     text = (
-        f"🖼️ <b>Image Settings</b>\n"
+        f"🧩 <b>Screen Content Manager</b>\n"
         f"{separator()}\n\n"
-        "Manage per-screen images for your bot.\n"
-        "Each screen can have its own banner image.\n\n"
-        f"🔧 Global Toggle: <b>{toggle_status}</b>\n\n"
-        "👇 Tap a screen to set or clear its image:"
+        "Manage images and text for each screen.\n"
+        "Each screen can have custom image + text.\n\n"
+        f"🔧 Global Images Toggle: <b>{toggle_status}</b>\n\n"
+        "👇 Tap a screen to manage its content:"
     )
     
     from keyboards import admin_images_kb
@@ -1238,6 +1252,77 @@ async def admin_img_toggle_handler(update: Update, context: ContextTypes.DEFAULT
     
     status = "🟢 ON" if new_val == "on" else "🔴 OFF"
     await query.answer(f"✅ Images: {status}", show_alert=True)
+    
+    # Refresh panel
+    await admin_img_panel_handler(update, context)
+
+
+# ════════════════════════ TEXT EDITING HANDLERS (NEW) ════════════════════════
+
+async def admin_txt_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prompt admin to send text/caption for a specific screen."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    key = query.data.split(":")[1]
+    
+    # Map keys to friendly screen names
+    screen_names = {
+        "welcome_text": "Welcome / Main Menu",
+        "shop_text": "Shop",
+        "cart_text": "Cart",
+        "orders_text": "Orders",
+        "wallet_text": "Wallet",
+        "support_text": "Support",
+        "admin_panel_text": "Admin Panel",
+    }
+    
+    screen_name = screen_names.get(key, key)
+    current = await get_setting(key, "")
+    status = f"Current: <code>{html_escape(current[:100])}</code>" if current else "❌ Not set (using default)"
+    
+    context.user_data["state"] = f"adm_txt_wait:{key}"
+    
+    text = (
+        f"✍️ <b>Edit Text: {screen_name}</b>\n"
+        f"{separator()}\n\n"
+        f"{status}\n\n"
+        "📝 Send the new text/caption for this screen.\n\n"
+        "<i>HTML formatting supported: &lt;b&gt;bold&lt;/b&gt;, &lt;i&gt;italic&lt;/i&gt;</i>\n\n"
+        "💡 Leave empty to use default generated text."
+    )
+    
+    # Edit the message and store its message_id for later deletion
+    await safe_edit(query, text, reply_markup=back_kb("adm_img_panel"))
+    
+    # Store prompt message_id so we can delete it after text is received
+    context.user_data["adm_txt_prompt_msg_id"] = query.message.message_id
+
+
+async def admin_txt_clear_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Clear/reset text for a specific screen (back to default)."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+
+    key = query.data.split(":")[1]
+    await set_setting(key, "")
+    
+    screen_names = {
+        "welcome_text": "Welcome",
+        "shop_text": "Shop",
+        "cart_text": "Cart",
+        "orders_text": "Orders",
+        "wallet_text": "Wallet",
+        "support_text": "Support",
+        "admin_panel_text": "Admin Panel",
+    }
+    
+    screen_name = screen_names.get(key, key)
+    await query.answer(f"✅ {screen_name} text reset to default!", show_alert=True)
     
     # Refresh panel
     await admin_img_panel_handler(update, context)
@@ -1888,6 +1973,74 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         msg = await update.message.reply_text("✅ FAQ added!", parse_mode="HTML")
         await auto_delete(msg)
         await auto_delete(update.message)
+        return
+
+    # ── Screen Text: set custom text ──
+    if state.startswith("adm_txt_wait:"):
+        key = state.split(":", 1)[1]
+        
+        # DIAGNOSTIC LOGGING
+        logger.info(f"=== ADM_TXT_WAIT HANDLER TRIGGERED ===")
+        logger.info(f"Key: {key}")
+        logger.info(f"Admin chat_id: {update.effective_chat.id}")
+        logger.info(f"Text length: {len(text)}")
+        
+        # Save text to settings
+        await set_setting(key, text)
+        logger.info(f"✅ Saved {key} to settings")
+        
+        # Map keys to friendly screen names
+        screen_names = {
+            "welcome_text": "Welcome / Main Menu",
+            "shop_text": "Shop",
+            "cart_text": "Cart",
+            "orders_text": "Orders",
+            "wallet_text": "Wallet",
+            "support_text": "Support",
+            "admin_panel_text": "Admin Panel",
+        }
+        screen_name = screen_names.get(key, key)
+        
+        # 1. Delete the prompt message (bot's own message - MUST work)
+        prompt_msg_id = context.user_data.pop("adm_txt_prompt_msg_id", None)
+        logger.info(f"Prompt message_id from user_data: {prompt_msg_id}")
+        
+        if prompt_msg_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=update.effective_chat.id,
+                    message_id=prompt_msg_id
+                )
+                logger.info(f"✅ Deleted prompt message (chat={update.effective_chat.id}, msg={prompt_msg_id})")
+            except Exception as e:
+                logger.warning(f"❌ Failed to delete prompt: {type(e).__name__}: {e}")
+        
+        # 2. Send confirmation message (bot's own message)
+        msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"✅ <b>Text saved for {screen_name}!</b>\n\n"
+                 "The custom text will now appear on this screen.",
+            parse_mode="HTML"
+        )
+        logger.info(f"✅ Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
+        
+        # 3. Schedule deletion of confirmation (bot's own message - MUST work)
+        from helpers import schedule_delete
+        schedule_delete(context, msg.chat_id, msg.message_id, delay=7)
+        
+        # 4. Try to delete admin's text message (best effort)
+        try:
+            await update.message.delete()
+            logger.info(f"✅ Deleted admin text message")
+        except Exception:
+            logger.info(f"ℹ️ Could not delete admin text (expected in DM)")
+        
+        # Clear state
+        context.user_data.pop("state", None)
+        logger.info(f"✅ Cleared state from user_data")
+        
+        await add_action_log("text_set", ADMIN_ID, f"{key}: {text[:50]}")
+        logger.info(f"=== ADM_TXT_WAIT HANDLER COMPLETE ===")
         return
 
 

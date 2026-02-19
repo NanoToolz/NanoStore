@@ -136,6 +136,8 @@ from handlers.admin import (
     admin_img_set_handler,
     admin_img_clear_handler,
     admin_img_toggle_handler,
+    admin_txt_set_handler,
+    admin_txt_clear_handler,
     admin_fj_handler,
     admin_fj_add_handler,
     admin_fj_del_handler,
@@ -431,6 +433,8 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(admin_img_set_handler, pattern=r"^adm_img_set:.+$"))
     app.add_handler(CallbackQueryHandler(admin_img_clear_handler, pattern=r"^adm_img_clear:.+$"))
     app.add_handler(CallbackQueryHandler(admin_img_toggle_handler, pattern=r"^adm_img_toggle$"))
+    app.add_handler(CallbackQueryHandler(admin_txt_set_handler, pattern=r"^adm_txt_set:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_txt_clear_handler, pattern=r"^adm_txt_clear:.+$"))
 
     # ---- Admin: Force Join ----
     app.add_handler(CallbackQueryHandler(admin_fj_handler, pattern=r"^adm_fj$"))
