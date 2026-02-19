@@ -9,6 +9,110 @@ from config import LOG_CHANNEL_ID
 logger = logging.getLogger(__name__)
 
 
+# ════════════════════════ RENDER SCREEN (IMAGE + TEXT) ════════════════════════
+
+async def render_screen(
+    *,
+    query=None,
+    message=None,
+    bot,
+    chat_id: int,
+    text: str,
+    reply_markup=None,
+    image_setting_key: str,
+    parse_mode: str = "HTML",
+    delete_prev: bool = True
+) -> None:
+    """Render a screen with optional image support.
+
+    This helper provides a unified way to display screens with per-screen images.
+    
+    Behavior:
+    1. If ui_images_enabled is "off", always use text-only mode
+    2. If image_setting_key has a file_id, send photo with caption + buttons (ONE message)
+    3. If no image, fall back to text-only mode
+    4. If photo send fails, fall back to text-only mode
+    
+    Args:
+        query: CallbackQuery when available (for editing existing messages)
+        message: Message when not a callback (for direct replies)
+        bot: Bot instance
+        chat_id: Chat ID to send to
+        text: Screen text content (used as caption if image exists)
+        reply_markup: InlineKeyboardMarkup (can be None)
+        image_setting_key: Settings key for this screen's image (e.g., "shop_image_id")
+        parse_mode: Parse mode for text (default: "HTML")
+        delete_prev: Whether to delete previous message if query exists (default: True)
+    
+    HARD RULE: When image exists and enabled, use send_photo with caption+buttons in ONE message.
+    """
+    from database import get_setting
+    
+    # 1. Check global toggle
+    ui_enabled = await get_setting("ui_images_enabled", "on")
+    if ui_enabled != "on":
+        # Use text-only mode
+        if query:
+            await safe_edit(query, text, reply_markup, parse_mode)
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+                disable_web_page_preview=True
+            )
+        return
+    
+    # 2. Get image for this screen
+    image_id = await get_setting(image_setting_key, "")
+    
+    # 3. If no image, fall back to text-only
+    if not image_id:
+        if query:
+            await safe_edit(query, text, reply_markup, parse_mode)
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+                disable_web_page_preview=True
+            )
+        return
+    
+    # 4. Image exists - send photo with caption
+    try:
+        # Delete previous message if it's a callback query
+        if query and delete_prev:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+        
+        # Send photo with caption and buttons (ONE message)
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=image_id,
+            caption=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+    except Exception as e:
+        # Fallback to text-only if photo send fails
+        logger.warning(f"render_screen photo failed for {image_setting_key}: {e}")
+        if query:
+            await safe_edit(query, text, reply_markup, parse_mode)
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+                disable_web_page_preview=True
+            )
+
+
 # ════════════════════════ SAFE EDIT ════════════════════════
 
 async def safe_edit(
@@ -228,8 +332,8 @@ async def auto_delete(message, delay: int | None = None) -> None:
 
     try:
         if delay is None:
-            raw = await get_setting("auto_delete", "0")
-            delay = int(raw or 0)
+            raw = await get_setting("auto_delete", "0") or "0"
+            delay = int(raw)
         else:
             delay = int(delay)
     except Exception:
