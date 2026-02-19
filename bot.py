@@ -60,6 +60,31 @@ from handlers.orders import (
 from handlers.rewards import (
     reward_handler,
 )
+from handlers.tickets import (
+    support_handler,
+    ticket_new_handler,
+    ticket_subject_handler,
+    ticket_message_handler,
+    my_tickets_handler,
+    ticket_detail_handler,
+    ticket_reply_prompt_handler,
+    ticket_reply_text_handler,
+    admin_tickets_handler,
+    admin_tickets_all_handler,
+    admin_ticket_detail_handler,
+    admin_ticket_close_handler,
+    admin_ticket_reopen_handler,
+)
+from handlers.wallet import (
+    wallet_handler,
+    wallet_topup_handler,
+    wallet_amt_preset_handler,
+    wallet_amt_custom_handler,
+    wallet_amount_text_handler,
+    wallet_pay_method_handler,
+    wallet_proof_photo_handler,
+    wallet_history_handler,
+)
 from handlers.admin import (
     admin_handler,
     back_admin_handler,
@@ -100,6 +125,10 @@ from handlers.admin import (
     admin_proof_approve_handler,
     admin_proof_reject_handler,
     admin_proof_post_handler,
+    admin_topups_handler,
+    admin_topup_detail_handler,
+    admin_topup_approve_handler,
+    admin_topup_reject_handler,
     admin_settings_handler,
     admin_set_handler,
     admin_welcome_image_handler,
@@ -112,21 +141,6 @@ from handlers.admin import (
     admin_broadcast_confirm_handler,
     admin_text_router,
     admin_photo_router,
-)
-from handlers.tickets import (
-    support_handler,
-    ticket_new_handler,
-    ticket_subject_handler,
-    ticket_message_handler,
-    my_tickets_handler,
-    ticket_detail_handler,
-    ticket_reply_prompt_handler,
-    ticket_reply_text_handler,
-    admin_tickets_handler,
-    admin_tickets_all_handler,
-    admin_ticket_detail_handler,
-    admin_ticket_close_handler,
-    admin_ticket_reopen_handler,
 )
 
 logger = logging.getLogger(__name__)
@@ -202,6 +216,8 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await ticket_message_handler(update, context)
     elif state.startswith("ticket_reply:"):
         await ticket_reply_text_handler(update, context)
+    elif state == "wallet_topup_amount":
+        await wallet_amount_text_handler(update, context)
 
 
 async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -218,6 +234,8 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # User states
     if state.startswith("proof_upload:"):
         await proof_upload_handler(update, context)
+    elif state.startswith("wallet_proof:"):
+        await wallet_proof_photo_handler(update, context)
 
 
 def register_handlers(app: Application) -> None:
@@ -275,6 +293,14 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(ticket_reply_prompt_handler, pattern=r"^ticket_reply:\d+$"))
     app.add_handler(CallbackQueryHandler(ticket_detail_handler, pattern=r"^ticket:\d+$"))
 
+    # ---- Wallet ----
+    app.add_handler(CallbackQueryHandler(wallet_handler, pattern=r"^wallet$"))
+    app.add_handler(CallbackQueryHandler(wallet_topup_handler, pattern=r"^wallet_topup$"))
+    app.add_handler(CallbackQueryHandler(wallet_amt_preset_handler, pattern=r"^wallet_amt:\d+"))
+    app.add_handler(CallbackQueryHandler(wallet_amt_custom_handler, pattern=r"^wallet_amt_custom$"))
+    app.add_handler(CallbackQueryHandler(wallet_pay_method_handler, pattern=r"^wallet_pay:\d+$"))
+    app.add_handler(CallbackQueryHandler(wallet_history_handler, pattern=r"^wallet_history$"))
+
     # ---- Admin Panel ----
     app.add_handler(CallbackQueryHandler(admin_handler, pattern=r"^admin$"))
     app.add_handler(CallbackQueryHandler(back_admin_handler, pattern=r"^back_admin$"))
@@ -330,6 +356,12 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(admin_proof_reject_handler, pattern=r"^adm_proof_rej:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_proof_post_handler, pattern=r"^adm_proof_post:\d+$"))
     app.add_handler(CallbackQueryHandler(admin_proof_detail_handler, pattern=r"^adm_proof:\d+$"))
+
+    # ---- Admin: Top-Ups ----
+    app.add_handler(CallbackQueryHandler(admin_topups_handler, pattern=r"^adm_topups$"))
+    app.add_handler(CallbackQueryHandler(admin_topup_detail_handler, pattern=r"^adm_topup:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_topup_approve_handler, pattern=r"^adm_topup_approve:\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_topup_reject_handler, pattern=r"^adm_topup_reject:\d+$"))
 
     # ---- Admin: Settings ----
     app.add_handler(CallbackQueryHandler(admin_settings_handler, pattern=r"^adm_settings$"))
