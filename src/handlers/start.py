@@ -1,24 +1,42 @@
 """NanoStore start handlers — /start, main menu, help, noop, force join verify."""
 
+import asyncio
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
-from database import ensure_user, is_user_banned, get_setting, add_action_log, get_user_order_count, get_user_balance
-from utils import safe_edit, html_escape, separator
-from utils import main_menu_kb, back_kb, force_join_kb
+from database import (
+    ensure_user, is_user_banned, get_setting, add_action_log,
+    get_user_balance, get_user_total_spent, get_user_total_deposited,
+    get_user_join_date, get_user_pending_orders, get_user_completed_orders,
+    get_user_referral_count, get_spin_status, get_user_order_count,
+    create_referral, add_points
+)
+from utils import safe_edit, html_escape, separator, send_typing
+from utils import main_menu_kb, back_kb
 
 logger = logging.getLogger(__name__)
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/start — entry point. Shows Main Menu directly with image."""
+    """/start — entry point. Shows 2 messages: welcome (auto-delete 60s) + main menu (persistent)."""
     user = update.effective_user
+    args = context.args
 
-    # Register or update user
+    # Check for referral link (format: ref_123456789)
+    referrer_id = None
+    if args and len(args) > 0 and args[0].startswith("ref_"):
+        try:
+            referrer_id = int(args[0].split("_")[1])
+            if referrer_id == user.id:
+                referrer_id = None  # Can't refer yourself
+        except (ValueError, IndexError):
+            referrer_id = None
+
+    # 1. Ensure user exists
     await ensure_user(user.id, user.first_name or "User", user.username or "")
 
-    # Ban check
+    # 2. Ban check
     if await is_user_banned(user.id):
         await update.message.reply_text(
             "⛔ <b>Access Denied</b>\n\n"
@@ -28,82 +46,182 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
 
-    # Show main menu directly
-    await _show_main_menu(update, context, is_command=True)
+    # 3. Maintenance check (admin bypasses)
+    maintenance = await get_setting("maintenance", "off")
+    if maintenance == "on" and user.id != ADMIN_ID:
+        maintenance_text = await get_setting("maintenance_text", "Bot is under maintenance. Please try again later.")
+        await update.message.reply_text(
+            f"� <b>Maintenance Mode</b>\n\n{html_escape(maintenance_text)}",
+            parse_mode="HTML",
+        )
+        return
+
+    # 4. Send typing indicator
+    await send_typing(update.effective_chat.id, context.bot)
+
+    # 5. Force join check (simplified - skip for now, can be added later)
+    # TODO: Implement force join verification if needed
+
+    # Handle referral if this is a new user
+    if referrer_id:
+        from database import get_user
+        existing = await get_user(user.id)
+        
+        # Only process referral if user just joined (within last 10 seconds)
+        from datetime import datetime, timedelta
+        try:
+            joined = datetime.fromisoformat(existing["joined_at"])
+            if datetime.utcnow() - joined < timedelta(seconds=10):
+                # Create referral relationship
+                if await create_referral(referrer_id, user.id):
+                    # Award points: 500 to new user, 1000 to referrer
+                    await add_points(user.id, 500, "Referral welcome bonus")
+                    await add_points(referrer_id, 1000, f"Referred user {user.id}")
+                    
+                    # Notify referrer
+                    try:
+                        await context.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"🎉 <b>New Referral!</b>\n\n"
+                                 f"<b>{html_escape(user.first_name)}</b> joined using your link!\n"
+                                 f"💎 You earned: <b>1,000 points</b>",
+                            parse_mode="HTML"
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Delete user's /start command
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # MESSAGE A: Detailed welcome (auto-delete after 60s)
+    welcome_text = await _build_welcome_text(user, context)
+    msg_a = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=welcome_text,
+        parse_mode="HTML"
+    )
+
+    # MESSAGE B: Persistent main menu (never deleted, always edited)
+    main_menu_text = await _build_main_menu_text(user)
+    is_admin = user.id == ADMIN_ID
+    msg_b = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=main_menu_text,
+        reply_markup=main_menu_kb(is_admin=is_admin),
+        parse_mode="HTML"
+    )
+
+    # Store MESSAGE B's message_id for future edits
+    context.user_data["menu_msg_id"] = msg_b.message_id
+
+    # Schedule MESSAGE A deletion after 60 seconds
+    async def delete_welcome():
+        try:
+            await asyncio.sleep(60)
+            await msg_a.delete()
+        except Exception as e:
+            logger.debug(f"Could not delete welcome message: {e}")
+    
+    asyncio.create_task(delete_welcome())
 
     # Log
     await add_action_log("user_start", user.id, f"@{user.username} ({user.first_name})")
 
 
-async def _show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is_command: bool = False) -> None:
-    """Show Main Menu with image from settings.
-    
-    Args:
-        update: Telegram update
-        context: Bot context
-        is_command: True if called from /start command, False if from callback
-    """
-    user = update.effective_user
+async def _build_welcome_text(user, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Build detailed welcome message text with all user stats."""
     store_name = await get_setting("bot_name", "NanoStore")
     currency = await get_setting("currency", "Rs")
     
-    # Get user data
-    from database import get_cart_count
+    # Get all user stats
     balance = await get_user_balance(user.id)
-    cart_count = await get_cart_count(user.id)
-    bal_display = int(balance) if balance == int(balance) else f"{balance:.2f}"
+    total_spent = await get_user_total_spent(user.id)
+    total_deposited = await get_user_total_deposited(user.id)
+    join_date = await get_user_join_date(user.id)
+    total_orders = await get_user_order_count(user.id)
+    completed_orders = await get_user_completed_orders(user.id)
+    pending_orders = await get_user_pending_orders(user.id)
+    referral_count = await get_user_referral_count(user.id)
+    spin_status = await get_spin_status(user.id)
     
-    # Check if user is admin
+    # Format values
+    full_name = user.first_name or "User"
+    username = user.username if user.username else "no username"
+    user_id = user.id
+    
+    # User status (VIP if spent > 50000)
+    status = "⭐ VIP Member" if total_spent > 50000 else "Regular Member"
+    
+    # Format amounts
+    bal_display = int(balance) if balance == int(balance) else f"{balance:.2f}"
+    spent_display = int(total_spent) if total_spent == int(total_spent) else f"{total_spent:.2f}"
+    deposited_display = int(total_deposited) if total_deposited == int(total_deposited) else f"{total_deposited:.2f}"
+    
+    # Spin status text
+    if spin_status["available"]:
+        spin_text = "Ready to Spin! ✅"
+    else:
+        h = spin_status["hours_left"]
+        m = spin_status["mins_left"]
+        spin_text = f"Come back in {h}h {m}m ⏳"
+    
+    # Build orders line (hide pending if 0)
+    if pending_orders > 0:
+        orders_line = f"📦 Orders: {total_orders}   ✅ Done: {completed_orders}   ⏳ Pending: {pending_orders}"
+    else:
+        orders_line = f"📦 Orders: {total_orders}   ✅ Done: {completed_orders}"
+    
+    text = (
+        f"🛍️ <b>{html_escape(store_name)}</b>\n"
+        f"Hey {html_escape(full_name)}, Welcome Back! 👋\n\n"
+        f"👤 {html_escape(full_name)}  •  @{html_escape(username)}  •  ID: {user_id}\n"
+        f"📅 Member since {join_date}  •  {status}\n\n"
+        f"💳 Balance: {currency} {bal_display}\n"
+        f"💸 Total Spent: {currency} {spent_display}\n"
+        f"💰 Total Deposited: {currency} {deposited_display}\n\n"
+        f"{orders_line}\n\n"
+        f"🎰 Daily Spin — {spin_text}\n"
+        f"👥 Referrals — {referral_count} friends joined 🎉\n\n"
+        f"⚡ Instant Auto-Delivery on all products!"
+    )
+    
+    return text
+
+
+async def _build_main_menu_text(user) -> str:
+    """Build simple main menu text."""
+    store_name = await get_setting("bot_name", "NanoStore")
+    first_name = user.first_name or "User"
+    
+    text = (
+        f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n\n"
+        f"Welcome back, {html_escape(first_name)}! Choose an option below:"
+    )
+    
+    return text
+
+
+async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show Main Menu Hub (callback from button) - edits MESSAGE B."""
+    query = update.callback_query
+    await query.answer()
+
+    user = update.effective_user
     is_admin = user.id == ADMIN_ID
     
     # Clear any state
     context.user_data.pop("state", None)
     context.user_data.pop("temp", None)
 
-    text = (
-        f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n"
-        f"{separator()}\n\n"
-        f"💳 Balance: <b>{currency} {bal_display}</b>\n\n"
-        "Choose an option below:"
-    )
+    main_menu_text = await _build_main_menu_text(user)
     
-    from utils import main_menu_kb, render_screen
-    
-    if is_command:
-        # Called from /start command - send new message with image
-        await render_screen(
-            query=None,
-            bot=context.bot,
-            chat_id=update.message.chat_id,
-            text=text,
-            reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count),
-            image_setting_key="shop_image_id",  # Use shop image for main menu
-            admin_id=ADMIN_ID
-        )
-    else:
-        # Called from callback - edit existing message
-        query = update.callback_query
-        await render_screen(
-            query=query,
-            bot=context.bot,
-            chat_id=query.message.chat_id,
-            text=text,
-            reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count),
-            image_setting_key="shop_image_id",
-            admin_id=ADMIN_ID
-        )
-
-
-async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show Main Menu Hub (callback from button).
-    
-    Uses render_screen with shop_image_id.
-    """
-    query = update.callback_query
-    await query.answer()
-
-    # Use the shared function
-    await _show_main_menu(update, context, is_command=False)
+    # Edit the persistent message (MESSAGE B) - NEVER delete, NEVER send new
+    await safe_edit(query, main_menu_text, reply_markup=main_menu_kb(is_admin=is_admin))
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -116,11 +234,12 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"ℹ️ <b>{html_escape(store_name)} — Help Guide</b>\n"
         f"{separator()}\n\n"
         "🛍️ <b>Shop</b> — Browse all product categories\n"
-        "🔍 <b>Search</b> — Find products by keyword\n"
         "🛒 <b>Cart</b> — Add items, adjust quantities\n"
         "📦 <b>My Orders</b> — Track order status\n"
         "🎫 <b>Support</b> — Create tickets for help\n"
-        "💳 <b>Wallet</b> — Top-up balance, view history\n\n"
+        "💳 <b>Wallet</b> — Top-up balance, view history\n"
+        "🎰 <b>Daily Spin</b> — Earn points daily\n"
+        "👥 <b>Referral</b> — Invite friends, earn rewards\n\n"
         "<i>Create a support ticket for any issue.</i>"
     )
     await safe_edit(query, text, reply_markup=back_kb("main_menu"))

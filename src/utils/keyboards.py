@@ -54,23 +54,21 @@ def welcome_kb() -> InlineKeyboardMarkup:
     ])
 
 
-def main_menu_kb(is_admin: bool = False, cart_count: int = 0) -> InlineKeyboardMarkup:
-    """Main menu keyboard (hub only - no welcome content).
+def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Main menu keyboard - Clean layout without Help/Search.
 
-    Layout (user request):
-    Row 1: 🛍️ Shop
-    Row 2: 🛒 Cart (with count) | 📦 My Orders
-    Row 3: 🎫 Support | ❓ Help
-    Row 4: 🔍 Search | 💳 My Wallet
+    Layout:
+    Row 1: 🛍️ Shop (full width)
+    Row 2: 🛒 Cart | 📦 My Orders
+    Row 3: 💳 Wallet | 🎫 Support
+    Row 4: 🎰 Daily Spin | 👥 Referral
     Last (admin only): ⚙️ Admin Panel
     """
-    cart_label = f"🛒 Cart ({cart_count})" if cart_count > 0 else "🛒 Cart"
-    
     rows = [
         [Btn("🛍️ Shop", callback_data="shop")],
-        [Btn(cart_label, callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
-        [Btn("🎫 Support", callback_data="support"), Btn("❓ Help", callback_data="help")],
-        [Btn("🔍 Search", callback_data="search"), Btn("💳 My Wallet", callback_data="wallet")],
+        [Btn("🛒 Cart", callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
+        [Btn("💳 Wallet", callback_data="wallet"), Btn("🎫 Support", callback_data="support")],
+        [Btn("🎰 Daily Spin", callback_data="daily_spin"), Btn("👥 Referral", callback_data="referral")],
     ]
     if is_admin:
         rows.append([Btn("⚙️ Admin Panel", callback_data="admin")])
@@ -720,8 +718,60 @@ def wallet_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [Btn("💰 Top-Up Wallet", callback_data="wallet_topup")],
         [Btn("📜 Top-Up History", callback_data="wallet_history")],
+        [Btn("⚙️ Preferences", callback_data="user_preferences")],
         [Btn("◀️ Main Menu", callback_data="main_menu")],
     ])
+
+
+# ════════════════════════ REFERRAL ════════════════════════
+
+def referral_kb(bot_username: str, user_id: int) -> InlineKeyboardMarkup:
+    """Referral program keyboard."""
+    referral_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    return InlineKeyboardMarkup([
+        [Btn("📤 Share My Link", url=f"https://t.me/share/url?url={referral_link}&text=Join me on NanoStore!")],
+        [Btn("📊 Referral History", callback_data="referral_history")],
+        [Btn("◀️ Main Menu", callback_data="main_menu")],
+    ])
+
+
+def referral_history_kb() -> InlineKeyboardMarkup:
+    """Referral history back button."""
+    return InlineKeyboardMarkup([
+        [Btn("◀️ Back to Referral", callback_data="referral")],
+    ])
+
+
+# ════════════════════════ USER PREFERENCES ════════════════════════
+
+def user_preferences_kb(current_currency: str) -> InlineKeyboardMarkup:
+    """User preferences keyboard."""
+    return InlineKeyboardMarkup([
+        [Btn(f"💱 Currency: {current_currency}", callback_data="change_currency")],
+        [Btn("◀️ Back to Wallet", callback_data="wallet")],
+    ])
+
+
+def currency_selection_kb(current: str) -> InlineKeyboardMarkup:
+    """Currency selection keyboard."""
+    currencies = [
+        ("PKR", "🇵🇰"),
+        ("USD", "💵"),
+        ("AED", "🇦🇪"),
+        ("SAR", "🇸🇦"),
+        ("GBP", "🇬🇧"),
+    ]
+    
+    rows = []
+    for code, flag in currencies:
+        check = "✅ " if code == current else ""
+        rows.append([Btn(f"{check}{flag} {code}", callback_data=f"set_currency:{code}")])
+    
+    rows.append([Btn("◀️ Back", callback_data="user_preferences")])
+    return InlineKeyboardMarkup(rows)
+
+
+# ════════════════════════ WALLET (ORIGINAL) ════════════════════════
 
 
 def wallet_topup_amounts_kb(min_amt: float, max_amt: float, currency: str) -> InlineKeyboardMarkup:

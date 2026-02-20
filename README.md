@@ -8,6 +8,46 @@ A feature-rich Telegram bot for running a complete digital store with automated 
 
 ## ✨ Features
 
+### 🎮 Gamification & Engagement (NEW!)
+
+**Points System:**
+- **Separate from Wallet** - Points are earned, not purchased
+- **Multiple Earning Methods** - Daily Spin, Referrals, Birthday bonus
+- **Order Discounts** - Use points for up to 20% off orders
+- **Points History** - Track all points transactions
+- **Conversion Rate** - 1 point = Rs 0.28
+
+**Daily Spin System:**
+- **24-Hour Cooldown** - Spin once per day for free points
+- **Random Rewards** - Win 50-2,000 points per spin
+- **Rarity Tiers** - Common (60%), Rare (25%), Epic (12%), Legendary (3%)
+- **Visual Feedback** - See rarity and points won
+- **Cooldown Display** - Shows exact time until next spin
+
+**Referral Program:**
+- **Unique Links** - Each user gets a personal referral link
+- **Automatic Rewards** - 500 pts for new user, 1,000 pts for referrer
+- **Referral Tracking** - View all referred users and stats
+- **Share Integration** - One-tap sharing via Telegram
+- **Referral History** - See who joined and when
+- **Instant Notifications** - Get notified when someone joins
+
+**Multi-Currency Support:**
+- **5 Currencies** - PKR 🇵🇰, USD 💵, AED 🇦🇪, SAR 🇸🇦, GBP 🇬🇧
+- **Live Exchange Rates** - Fetched from CoinGecko API every 5 minutes
+- **Auto-Conversion** - All prices shown in user's selected currency
+- **Fallback System** - Uses cached rates if API fails
+- **User Preferences** - Easy currency switching
+- **Admin Simplicity** - Set prices in PKR only, bot handles conversion
+
+**Enhanced Welcome Screen:**
+- **Comprehensive Stats** - Balance, spent, deposited, orders, referrals
+- **VIP Status** - Automatic recognition for high spenders (>10k PKR)
+- **Member Since** - Shows join date
+- **Spin Status** - Real-time availability display
+- **Referral Count** - See how many friends joined
+- **Order Summary** - Total, completed, and pending orders
+
 ### 🛒 Customer Features
 
 **Shopping Experience:**

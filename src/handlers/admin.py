@@ -544,8 +544,14 @@ async def admin_order_status_handler(update: Update, context: ContextTypes.DEFAU
         await query.answer("❌ Order not found.", show_alert=True)
         return
 
+    old_status = order["status"]
     await update_order(order_id, status=new_status)
     await add_action_log("order_status", ADMIN_ID, f"Order #{order_id} → {new_status}")
+
+    # Track spending when order is completed/delivered
+    if new_status in ("completed", "delivered") and old_status not in ("completed", "delivered"):
+        from database import update_user_spent
+        await update_user_spent(order["user_id"], order["total"])
 
     # Notify user
     try:
@@ -567,6 +573,7 @@ async def admin_order_status_handler(update: Update, context: ContextTypes.DEFAU
     # Refresh detail view
     query.data = f"adm_ord:{order_id}"
     await admin_order_detail_handler(update, context)
+
 
 
 # ════════════════════════ USERS ════════════════════════
@@ -1580,7 +1587,7 @@ async def admin_topup_approve_handler(update: Update, context: ContextTypes.DEFA
     if not _is_admin(update.effective_user.id):
         return
 
-    from database import get_topup, update_topup, update_user_balance
+    from database import get_topup, update_topup, update_user_balance, update_user_deposited
     topup_id = int(query.data.split(":")[1])
     topup = await get_topup(topup_id)
     if not topup:
@@ -1592,6 +1599,10 @@ async def admin_topup_approve_handler(update: Update, context: ContextTypes.DEFA
 
     await update_topup(topup_id, status="approved", reviewed_by=ADMIN_ID)
     await update_user_balance(topup["user_id"], credit)
+    
+    # Track total deposited
+    await update_user_deposited(topup["user_id"], topup["amount"])
+    
     await add_action_log("topup_approved", ADMIN_ID, f"Top-Up #{topup_id}, Amount: {credit}")
 
     currency = await get_setting("currency", "Rs")

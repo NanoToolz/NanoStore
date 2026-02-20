@@ -367,3 +367,137 @@ async def log_action(bot, message: str, log_channel_id: Optional[int] = None) ->
         )
     except Exception as e:
         logger.warning(f"Failed to log action: {e}")
+
+
+
+# ======================== MULTI-CURRENCY SYSTEM ========================
+
+# In-memory cache for currency rates (refreshed every 5 minutes)
+_currency_cache = {}
+_cache_timestamp = None
+
+SUPPORTED_CURRENCIES = {
+    "PKR": {"symbol": "Rs", "flag": "🇵🇰", "name": "Pakistani Rupee"},
+    "USD": {"symbol": "$", "flag": "💵", "name": "US Dollar"},
+    "AED": {"symbol": "د.إ", "flag": "🇦🇪", "name": "UAE Dirham"},
+    "SAR": {"symbol": "﷼", "flag": "🇸🇦", "name": "Saudi Riyal"},
+    "GBP": {"symbol": "£", "flag": "🇬🇧", "name": "British Pound"},
+}
+
+
+async def fetch_live_rates() -> dict:
+    """
+    Fetch live currency rates from CoinGecko API.
+    Returns dict of {currency: rate_vs_pkr}.
+    Falls back to cached rates if API fails.
+    """
+    global _currency_cache, _cache_timestamp
+    from datetime import datetime, timedelta
+    import aiohttp
+    
+    # Check if cache is still valid (5 minutes)
+    if _cache_timestamp and (datetime.utcnow() - _cache_timestamp) < timedelta(minutes=5):
+        if _currency_cache:
+            return _currency_cache
+    
+    try:
+        # Fetch rates from CoinGecko (free API, no key needed)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={
+                    "ids": "tether",  # Use USDT as stable reference
+                    "vs_currencies": "pkr,usd,aed,sar,gbp"
+                },
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    tether = data.get("tether", {})
+                    
+                    # Calculate rates vs PKR
+                    pkr_rate = tether.get("pkr", 280)  # Fallback to 280
+                    rates = {
+                        "PKR": 1.0,  # Base currency
+                        "USD": pkr_rate / tether.get("usd", 1.0),
+                        "AED": pkr_rate / tether.get("aed", 3.67),
+                        "SAR": pkr_rate / tether.get("sar", 3.75),
+                        "GBP": pkr_rate / tether.get("gbp", 0.79),
+                    }
+                    
+                    _currency_cache = rates
+                    _cache_timestamp = datetime.utcnow()
+                    
+                    # Store in database for persistence
+                    import database
+                    for curr, rate in rates.items():
+                        if curr != "PKR":
+                            await database.update_currency_rate(curr, rate)
+                    
+                    logger.info(f"Updated currency rates: {rates}")
+                    return rates
+    except Exception as e:
+        logger.warning(f"Failed to fetch live rates: {e}")
+    
+    # Fallback to database cache
+    if not _currency_cache:
+        import database
+        _currency_cache = {
+            "PKR": 1.0,
+            "USD": await database.get_currency_rate("USD") or 280.0,
+            "AED": await database.get_currency_rate("AED") or 76.0,
+            "SAR": await database.get_currency_rate("SAR") or 75.0,
+            "GBP": await database.get_currency_rate("GBP") or 355.0,
+        }
+        _cache_timestamp = datetime.utcnow()
+    
+    return _currency_cache
+
+
+async def convert_amount(amount_pkr: float, target_currency: str) -> float:
+    """
+    Convert amount from PKR to target currency.
+    
+    Args:
+        amount_pkr: Amount in PKR (base currency)
+        target_currency: Target currency code (USD, AED, SAR, GBP, PKR)
+    
+    Returns:
+        Converted amount
+    """
+    if target_currency == "PKR":
+        return amount_pkr
+    
+    rates = await fetch_live_rates()
+    rate = rates.get(target_currency, 1.0)
+    
+    return amount_pkr / rate
+
+
+async def format_currency(amount: float, currency_code: str) -> str:
+    """
+    Format amount with currency symbol.
+    
+    Args:
+        amount: Amount to format
+        currency_code: Currency code (PKR, USD, AED, SAR, GBP)
+    
+    Returns:
+        Formatted string like "Rs 1,000" or "$10.50"
+    """
+    curr_info = SUPPORTED_CURRENCIES.get(currency_code, SUPPORTED_CURRENCIES["PKR"])
+    symbol = curr_info["symbol"]
+    
+    # Format with 2 decimals for non-PKR, no decimals for PKR if whole number
+    if currency_code == "PKR":
+        if amount == int(amount):
+            return f"{symbol} {int(amount):,}"
+        return f"{symbol} {amount:,.2f}"
+    else:
+        return f"{symbol} {amount:,.2f}"
+
+
+def get_currency_display(currency_code: str) -> str:
+    """Get display string for currency (e.g., 'PKR 🇵🇰')."""
+    curr_info = SUPPORTED_CURRENCIES.get(currency_code, SUPPORTED_CURRENCIES["PKR"])
+    return f"{currency_code} {curr_info['flag']}"

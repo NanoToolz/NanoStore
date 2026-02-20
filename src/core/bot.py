@@ -60,7 +60,16 @@ from handlers.orders import (
     order_detail_handler,
 )
 from handlers.rewards import (
-    reward_handler,
+    daily_spin_handler,
+)
+from handlers.referral import (
+    referral_handler,
+    referral_history_handler,
+)
+from handlers.preferences import (
+    user_preferences_handler,
+    change_currency_handler,
+    set_currency_handler,
 )
 from handlers.tickets import (
     support_handler,
@@ -399,8 +408,17 @@ def register_handlers(app: Application) -> None:
     # ---- Search ----
     app.add_handler(CallbackQueryHandler(search_handler, pattern=r"^search$"))
 
-    # ---- Daily Reward ----
-    app.add_handler(CallbackQueryHandler(reward_handler, pattern=r"^reward$"))
+    # ---- Daily Spin ----
+    app.add_handler(CallbackQueryHandler(daily_spin_handler, pattern=r"^daily_spin$"))
+
+    # ---- Referral ----
+    app.add_handler(CallbackQueryHandler(referral_handler, pattern=r"^referral$"))
+    app.add_handler(CallbackQueryHandler(referral_history_handler, pattern=r"^referral_history$"))
+
+    # ---- User Preferences ----
+    app.add_handler(CallbackQueryHandler(user_preferences_handler, pattern=r"^user_preferences$"))
+    app.add_handler(CallbackQueryHandler(change_currency_handler, pattern=r"^change_currency$"))
+    app.add_handler(CallbackQueryHandler(set_currency_handler, pattern=r"^set_currency:\w+$"))
 
     # ---- Orders ----
     app.add_handler(CallbackQueryHandler(checkout_handler, pattern=r"^checkout$"))

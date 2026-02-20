@@ -55,8 +55,14 @@ async def init_db() -> None:
             full_name   TEXT DEFAULT '',
             username    TEXT DEFAULT '',
             balance     REAL DEFAULT 0.0,
+            points      INTEGER DEFAULT 0,
+            currency    TEXT DEFAULT 'PKR',
             banned      INTEGER DEFAULT 0,
-            joined_at   TEXT DEFAULT (datetime('now'))
+            joined_at   TEXT DEFAULT (datetime('now')),
+            last_spin   TEXT DEFAULT NULL,
+            referrer_id INTEGER DEFAULT NULL,
+            total_spent REAL DEFAULT 0.0,
+            total_deposited REAL DEFAULT 0.0
         );
 
         CREATE TABLE IF NOT EXISTS categories (
@@ -197,6 +203,28 @@ async def init_db() -> None:
             admin_note      TEXT DEFAULT NULL,
             reviewed_by     INTEGER DEFAULT NULL,
             created_at      TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS points_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            amount      INTEGER NOT NULL,
+            reason      TEXT NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS referrals (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            referrer_id     INTEGER NOT NULL,
+            referred_id     INTEGER NOT NULL,
+            created_at      TEXT DEFAULT (datetime('now')),
+            UNIQUE(referred_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS currency_rates (
+            currency    TEXT PRIMARY KEY,
+            rate_vs_pkr REAL NOT NULL,
+            updated_at  TEXT DEFAULT (datetime('now'))
         );
     """)
 
@@ -1103,3 +1131,423 @@ async def get_dashboard_stats() -> dict:
         "open_tickets": tickets_row["c"],
         "pending_topups": topups_row["c"],
     }
+
+
+# ======================== POINTS SYSTEM ========================
+
+async def get_user_points(user_id: int) -> int:
+    """Get user's current points balance."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT points FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["points"] if row else 0
+
+
+async def add_points(user_id: int, amount: int, reason: str) -> None:
+    """Add points to user and log the transaction."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE users SET points = points + ? WHERE user_id = ?",
+        (amount, user_id),
+    )
+    await db.execute(
+        "INSERT INTO points_history (user_id, amount, reason) VALUES (?, ?, ?)",
+        (user_id, amount, reason),
+    )
+    await db.commit()
+
+
+async def deduct_points(user_id: int, amount: int) -> bool:
+    """Deduct points from user. Returns True if successful, False if insufficient points."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT points FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    if not row or row["points"] < amount:
+        return False
+    
+    await db.execute(
+        "UPDATE users SET points = points - ? WHERE user_id = ?",
+        (amount, user_id),
+    )
+    await db.execute(
+        "INSERT INTO points_history (user_id, amount, reason) VALUES (?, ?, ?)",
+        (user_id, -amount, "Used for order payment"),
+    )
+    await db.commit()
+    return True
+
+
+async def get_points_history(user_id: int, limit: int = 20) -> list:
+    """Get user's points transaction history."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM points_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (user_id, limit),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+# ======================== DAILY SPIN ========================
+
+async def can_spin(user_id: int) -> bool:
+    """Check if user can spin (24 hours since last spin)."""
+    from datetime import datetime, timedelta
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT last_spin FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    if not row or not row["last_spin"]:
+        return True
+    
+    try:
+        last_spin = datetime.fromisoformat(row["last_spin"])
+        now = datetime.utcnow()
+        return (now - last_spin) >= timedelta(hours=24)
+    except Exception:
+        return True
+
+
+async def get_next_spin_time(user_id: int) -> Optional[str]:
+    """Get time remaining until next spin. Returns None if can spin now."""
+    from datetime import datetime, timedelta
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT last_spin FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    if not row or not row["last_spin"]:
+        return None
+    
+    try:
+        last_spin = datetime.fromisoformat(row["last_spin"])
+        next_spin = last_spin + timedelta(hours=24)
+        now = datetime.utcnow()
+        
+        if now >= next_spin:
+            return None
+        
+        diff = next_spin - now
+        hours = int(diff.total_seconds() // 3600)
+        minutes = int((diff.total_seconds() % 3600) // 60)
+        return f"{hours}h {minutes}m"
+    except Exception:
+        return None
+
+
+async def record_spin(user_id: int, points_won: int) -> None:
+    """Record a spin and award points."""
+    from datetime import datetime
+    db = await get_db()
+    now = datetime.utcnow().isoformat()
+    
+    await db.execute(
+        "UPDATE users SET last_spin = ?, points = points + ? WHERE user_id = ?",
+        (now, points_won, user_id),
+    )
+    await db.execute(
+        "INSERT INTO points_history (user_id, amount, reason) VALUES (?, ?, ?)",
+        (user_id, points_won, f"Daily Spin"),
+    )
+    await db.commit()
+
+
+# ======================== REFERRAL SYSTEM ========================
+
+async def create_referral(referrer_id: int, referred_id: int) -> bool:
+    """Create a referral relationship. Returns True if successful, False if already exists."""
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
+            (referrer_id, referred_id),
+        )
+        await db.commit()
+        return True
+    except Exception:
+        return False
+
+
+async def get_referral_stats(user_id: int) -> dict:
+    """Get referral statistics for a user."""
+    db = await get_db()
+    
+    # Total referrals
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM referrals WHERE referrer_id = ?",
+        (user_id,),
+    )
+    row = await cur.fetchone()
+    total = row["cnt"] if row else 0
+    
+    # Points earned from referrals (1000 per referral)
+    points_earned = total * 1000
+    
+    return {
+        "total_referrals": total,
+        "points_earned": points_earned,
+        "active_referrals": total,  # All referrals are active
+    }
+
+
+async def get_referral_history(user_id: int, limit: int = 20) -> list:
+    """Get list of users referred by this user."""
+    db = await get_db()
+    cur = await db.execute(
+        """SELECT r.*, u.full_name, u.username, u.joined_at
+           FROM referrals r
+           JOIN users u ON r.referred_id = u.user_id
+           WHERE r.referrer_id = ?
+           ORDER BY r.created_at DESC LIMIT ?""",
+        (user_id, limit),
+    )
+    return _rows_to_list(await cur.fetchall())
+
+
+async def get_referrer(user_id: int) -> Optional[int]:
+    """Get the user who referred this user."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT referrer_id FROM referrals WHERE referred_id = ?",
+        (user_id,),
+    )
+    row = await cur.fetchone()
+    return row["referrer_id"] if row else None
+
+
+# ======================== MULTI-CURRENCY ========================
+
+async def get_user_currency(user_id: int) -> str:
+    """Get user's selected currency (default: PKR)."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT currency FROM users WHERE user_id = ?", (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["currency"] if row else "PKR"
+
+
+async def set_user_currency(user_id: int, currency_code: str) -> None:
+    """Set user's preferred currency."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE users SET currency = ? WHERE user_id = ?",
+        (currency_code, user_id),
+    )
+    await db.commit()
+
+
+async def get_currency_rate(currency: str) -> float:
+    """Get exchange rate for currency vs PKR. Returns 1.0 if not found."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT rate_vs_pkr FROM currency_rates WHERE currency = ?",
+        (currency,),
+    )
+    row = await cur.fetchone()
+    return row["rate_vs_pkr"] if row else 1.0
+
+
+async def update_currency_rate(currency: str, rate_vs_pkr: float) -> None:
+    """Update or insert currency exchange rate."""
+    from datetime import datetime
+    db = await get_db()
+    now = datetime.utcnow().isoformat()
+    await db.execute(
+        """INSERT OR REPLACE INTO currency_rates (currency, rate_vs_pkr, updated_at)
+           VALUES (?, ?, ?)""",
+        (currency, rate_vs_pkr, now),
+    )
+    await db.commit()
+
+
+async def get_user_stats(user_id: int) -> dict:
+    """Get comprehensive user statistics for welcome screen."""
+    db = await get_db()
+    
+    # Get user data
+    cur = await db.execute(
+        "SELECT * FROM users WHERE user_id = ?", (user_id,)
+    )
+    user = await cur.fetchone()
+    if not user:
+        return {}
+    
+    # Get order counts
+    cur = await db.execute(
+        """SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN status IN ('completed', 'delivered') THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status IN ('pending', 'confirmed', 'processing', 'shipped') THEN 1 ELSE 0 END) as pending
+           FROM orders WHERE user_id = ?""",
+        (user_id,),
+    )
+    orders = await cur.fetchone()
+    
+    # Get referral count
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM referrals WHERE referrer_id = ?",
+        (user_id,),
+    )
+    ref_row = await cur.fetchone()
+    
+    return {
+        "user_id": user["user_id"],
+        "full_name": user["full_name"],
+        "username": user["username"],
+        "balance": user["balance"],
+        "points": user["points"],
+        "currency": user["currency"],
+        "joined_at": user["joined_at"],
+        "total_spent": user["total_spent"],
+        "total_deposited": user["total_deposited"],
+        "total_orders": orders["total"] if orders else 0,
+        "completed_orders": orders["completed"] if orders else 0,
+        "pending_orders": orders["pending"] if orders else 0,
+        "referral_count": ref_row["cnt"] if ref_row else 0,
+    }
+
+
+
+async def update_user_spent(user_id: int, amount: float) -> None:
+    """Update user's total spent amount."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE users SET total_spent = total_spent + ? WHERE user_id = ?",
+        (amount, user_id),
+    )
+    await db.commit()
+
+
+async def update_user_deposited(user_id: int, amount: float) -> None:
+    """Update user's total deposited amount."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE users SET total_deposited = total_deposited + ? WHERE user_id = ?",
+        (amount, user_id),
+    )
+    await db.commit()
+
+
+
+# ======================== USER STATS HELPERS ========================
+
+async def get_user_total_spent(user_id: int) -> float:
+    """Get total amount spent by user on completed orders."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COALESCE(SUM(total), 0) as total FROM orders WHERE user_id = ? AND status = 'completed'",
+        (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["total"] if row else 0.0
+
+
+async def get_user_total_deposited(user_id: int) -> float:
+    """Get total amount deposited by user via approved topups."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM wallet_topups WHERE user_id = ? AND status = 'approved'",
+        (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["total"] if row else 0.0
+
+
+async def get_user_join_date(user_id: int) -> str:
+    """Get user join date formatted as 'Jan 2026'."""
+    from datetime import datetime
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT joined_at FROM users WHERE user_id = ?",
+        (user_id,)
+    )
+    row = await cur.fetchone()
+    if not row or not row["joined_at"]:
+        return "Unknown"
+    
+    try:
+        dt = datetime.fromisoformat(row["joined_at"])
+        return dt.strftime("%b %Y")
+    except Exception:
+        return "Unknown"
+
+
+async def get_user_pending_orders(user_id: int) -> int:
+    """Get count of pending/confirmed/processing orders."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM orders WHERE user_id = ? AND status IN ('pending', 'confirmed', 'processing')",
+        (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def get_user_completed_orders(user_id: int) -> int:
+    """Get count of completed orders."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT COUNT(*) as cnt FROM orders WHERE user_id = ? AND status = 'completed'",
+        (user_id,)
+    )
+    row = await cur.fetchone()
+    return row["cnt"] if row else 0
+
+
+async def get_user_referral_count(user_id: int) -> int:
+    """Get count of users referred by this user. Returns 0 if referrals table doesn't exist."""
+    try:
+        db = await get_db()
+        cur = await db.execute(
+            "SELECT COUNT(*) as cnt FROM referrals WHERE referrer_id = ?",
+            (user_id,)
+        )
+        row = await cur.fetchone()
+        return row["cnt"] if row else 0
+    except Exception:
+        return 0
+
+
+async def get_spin_status(user_id: int) -> dict:
+    """
+    Get daily spin status for user.
+    
+    Returns:
+        {
+            "available": bool,
+            "hours_left": int,
+            "mins_left": int
+        }
+    """
+    from datetime import datetime, timedelta
+    
+    try:
+        db = await get_db()
+        cur = await db.execute(
+            "SELECT last_spin FROM users WHERE user_id = ?",
+            (user_id,)
+        )
+        row = await cur.fetchone()
+        
+        if not row or not row["last_spin"]:
+            return {"available": True, "hours_left": 0, "mins_left": 0}
+        
+        last_spin = datetime.fromisoformat(row["last_spin"])
+        now = datetime.utcnow()
+        next_spin = last_spin + timedelta(hours=24)
+        
+        if now >= next_spin:
+            return {"available": True, "hours_left": 0, "mins_left": 0}
+        
+        diff = next_spin - now
+        hours = int(diff.total_seconds() // 3600)
+        mins = int((diff.total_seconds() % 3600) // 60)
+        
+        return {"available": False, "hours_left": hours, "mins_left": mins}
+    except Exception:
+        return {"available": True, "hours_left": 0, "mins_left": 0}

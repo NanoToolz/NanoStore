@@ -1,100 +1,123 @@
-"""NanoStore daily reward handler — claim free balance once per day."""
+"""NanoStore daily spin handler — spin wheel for points once per day."""
 
 import logging
-from datetime import datetime, timedelta
+import random
 from telegram import Update
 from telegram.ext import ContextTypes
 from database import (
     get_setting,
-    get_user_balance,
-    update_user_balance,
+    can_spin,
+    get_next_spin_time,
+    record_spin,
+    get_user_points,
     add_action_log,
-    get_user,
 )
-from utils import safe_edit, html_escape, separator, format_price, log_action
+from utils import safe_edit, html_escape, separator
 from utils import back_kb
+from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
 
-async def _get_last_reward_time(db, user_id: int):
-    """Check action_logs for user's last daily_reward claim."""
-    import aiosqlite
-    from database import get_db
-    conn = await get_db()
-    cur = await conn.execute(
-        """SELECT created_at FROM action_logs
-           WHERE action = 'daily_reward' AND user_id = ?
-           ORDER BY created_at DESC LIMIT 1""",
-        (user_id,),
-    )
-    row = await cur.fetchone()
-    if row:
-        try:
-            return datetime.fromisoformat(row["created_at"])
-        except Exception:
-            return None
-    return None
+def _get_spin_reward() -> tuple[int, str]:
+    """
+    Generate random spin reward with rarity tiers.
+    
+    Returns:
+        (points, rarity_name)
+    
+    Tiers:
+    - Common (60%): 50-200 pts
+    - Rare (25%): 201-500 pts
+    - Epic (12%): 501-1000 pts
+    - Legendary (3%): 1001-2000 pts
+    """
+    roll = random.random()
+    
+    if roll < 0.60:  # 60% - Common
+        points = random.randint(50, 200)
+        rarity = "Common"
+    elif roll < 0.85:  # 25% - Rare
+        points = random.randint(201, 500)
+        rarity = "Rare"
+    elif roll < 0.97:  # 12% - Epic
+        points = random.randint(501, 1000)
+        rarity = "Epic"
+    else:  # 3% - Legendary
+        points = random.randint(1001, 2000)
+        rarity = "Legendary"
+    
+    return points, rarity
 
 
-async def reward_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show daily reward page — claim or show cooldown."""
+async def daily_spin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show daily spin page — spin or show cooldown."""
     query = update.callback_query
     await query.answer()
 
     user_id = update.effective_user.id
-    reward_amount_str = await get_setting("daily_reward", "10")
-    currency = await get_setting("currency", "Rs")
-
-    try:
-        reward_amount = float(reward_amount_str)
-    except ValueError:
-        reward_amount = 10.0
-
-    last_claim = await _get_last_reward_time(None, user_id)
-    now = datetime.utcnow()
-
-    if last_claim and (now - last_claim) < timedelta(hours=24):
-        # Already claimed today
-        next_claim = last_claim + timedelta(hours=24)
-        diff = next_claim - now
-        hours = int(diff.total_seconds() // 3600)
-        minutes = int((diff.total_seconds() % 3600) // 60)
-
-        balance = await get_user_balance(user_id)
-        bal_display = format_price(balance, currency)
-
+    
+    # Check if user can spin
+    if not await can_spin(user_id):
+        # Show cooldown
+        time_left = await get_next_spin_time(user_id)
+        current_points = await get_user_points(user_id)
+        
         text = (
-            f"\U0001f381 <b>Daily Reward</b>\n"
+            f"🎰 <b>Daily Spin</b>\n"
             f"{separator()}\n\n"
-            f"\u23f3 You already claimed your reward today!\n\n"
-            f"\u23f0 Next claim in: <b>{hours}h {minutes}m</b>\n\n"
-            f"\U0001f4b0 Your balance: <b>{bal_display}</b>"
+            f"⏳ You already spun today!\n\n"
+            f"⏰ Next spin in: <b>{time_left}</b>\n\n"
+            f"💎 Your Points: <b>{current_points:,} pts</b>\n\n"
+            f"<i>Come back tomorrow for another spin!</i>"
         )
-        await safe_edit(query, text, reply_markup=back_kb("main_menu"))
+        
+        kb = InlineKeyboardMarkup([
+            [Btn("👥 Refer & Earn More Points", callback_data="referral")],
+            [Btn("◀️ Main Menu", callback_data="main_menu")],
+        ])
+        
+        await safe_edit(query, text, reply_markup=kb)
         return
-
-    # Claim reward
-    await update_user_balance(user_id, reward_amount)
-    await add_action_log("daily_reward", user_id, f"Claimed {currency} {reward_amount}")
-
-    new_balance = await get_user_balance(user_id)
-    reward_display = format_price(reward_amount, currency)
-    bal_display = format_price(new_balance, currency)
-
+    
+    # User can spin - perform spin
+    points_won, rarity = _get_spin_reward()
+    
+    # Record spin and award points
+    await record_spin(user_id, points_won)
+    
+    # Get new points total
+    new_points = await get_user_points(user_id)
+    
+    # Rarity emoji
+    rarity_emoji = {
+        "Common": "⚪",
+        "Rare": "🔵",
+        "Epic": "🟣",
+        "Legendary": "🟡",
+    }.get(rarity, "⚪")
+    
     text = (
-        f"\U0001f381 <b>Daily Reward</b>\n"
+        f"🎰 <b>Daily Spin Result!</b>\n"
         f"{separator()}\n\n"
-        f"\u2705 <b>Reward Claimed!</b>\n\n"
-        f"\U0001f4b0 You received: <b>{reward_display}</b>\n"
-        f"\U0001f4b3 New balance: <b>{bal_display}</b>\n\n"
-        f"Come back in 24 hours for more!"
+        f"🎯 You won: <b>{points_won:,} Points!</b> 🎉\n"
+        f"⭐ Rarity: <b>{rarity_emoji} {rarity}!</b>\n\n"
+        f"💎 Your Points: <b>{new_points:,} pts</b>\n\n"
+        f"⏳ Next Spin: <b>24 hours</b>\n\n"
+        f"<i>Use points to get up to 20% off on orders!</i>"
     )
-    await safe_edit(query, text, reply_markup=back_kb("main_menu"))
-
+    
+    kb = InlineKeyboardMarkup([
+        [Btn("👥 Refer & Earn More Points", callback_data="referral")],
+        [Btn("◀️ Main Menu", callback_data="main_menu")],
+    ])
+    
+    await safe_edit(query, text, reply_markup=kb)
+    
     # Log
     user = update.effective_user
-    await log_action(
-        context.bot,
-        f"\U0001f381 Daily reward: <b>{html_escape(user.first_name)}</b> claimed {reward_display}",
+    await add_action_log(
+        "daily_spin",
+        user_id,
+        f"{html_escape(user.first_name)} won {points_won} pts ({rarity})"
     )
