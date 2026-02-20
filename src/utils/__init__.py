@@ -1,6 +1,12 @@
 """Utilities module."""
 from .helpers import *
 from .keyboards import *
+from .activity_logger import (
+    log_activity, log_update, log_callback_click, log_command,
+    log_db_action, log_setting_update, log_order_action,
+    log_payment_action, log_admin_action, log_error_context,
+    activity_logged, log_handler_execution
+)
 
 __all__ = [
     # From helpers
@@ -17,4 +23,9 @@ __all__ = [
     'admin_coupons_kb', 'admin_payments_kb', 'admin_proofs_kb', 'admin_proof_detail_kb',
     'admin_tickets_kb', 'admin_fj_kb', 'admin_settings_kb', 'admin_broadcast_confirm_kb',
     'admin_content_kb', 'admin_content_screen_kb', 'CONTENT_SCREENS',
+    # From activity_logger
+    'log_activity', 'log_update', 'log_callback_click', 'log_command',
+    'log_db_action', 'log_setting_update', 'log_order_action',
+    'log_payment_action', 'log_admin_action', 'log_error_context',
+    'activity_logged', 'log_handler_execution',
 ]

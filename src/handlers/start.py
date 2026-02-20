@@ -21,6 +21,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """/start — entry point. Sends ONE message with welcome text + inline buttons."""
     user = update.effective_user
     args = context.args
+    
+    # Log command
+    from utils.activity_logger import log_command
+    log_command("start", user.id, user.username, args)
 
     # Check for referral link (format: ref_123456789)
     referrer_id = None
@@ -195,8 +199,12 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """Show Main Menu (callback from button) - edits existing message, does NOT resend welcome."""
     query = update.callback_query
     await query.answer()
-
+    
+    # Log callback click
+    from utils.activity_logger import log_callback_click
     user = update.effective_user
+    log_callback_click("main_menu", user.id, user.username)
+
     is_admin = user.id == ADMIN_ID
     
     # Clear any state

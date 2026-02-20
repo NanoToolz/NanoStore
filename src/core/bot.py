@@ -15,7 +15,15 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from config import BOT_TOKEN, ADMIN_ID, LOG_CHANNEL_ID
+from config import (
+    BOT_TOKEN, ADMIN_ID, LOG_CHANNEL_ID,
+    LOG_TO_CHANNEL, LOG_LEVEL, LOG_CHANNEL_LEVEL, FULL_VERBOSE_TO_CHANNEL
+)
+from utils.telegram_logger import setup_telegram_logging
+from utils.activity_logger import (
+    log_activity, log_update, log_callback_click, log_command,
+    log_error_context, log_handler_execution
+)
 from database import init_db
 from handlers.start import (
     start_handler,
@@ -183,7 +191,15 @@ async def post_init(application: Application) -> None:
     from utils import send_restart_notification
     
     await init_db()
+    
+    # Start Telegram log handler if enabled
+    telegram_handler = application.bot_data.get('telegram_log_handler')
+    if telegram_handler:
+        telegram_handler.start()
+        log_activity("SYSTEM", "Telegram log channel streaming started")
+    
     logger.info("Bot initialized. ADMIN_ID=%s", ADMIN_ID)
+    log_activity("SYSTEM", f"Bot initialized | Admin: {ADMIN_ID}")
     
     # Get bot name
     bot_name = await get_setting("bot_name", "NanoStore")
@@ -239,6 +255,10 @@ async def post_init(application: Application) -> None:
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Global error handler — log and notify admin."""
     logger.error("Exception while handling an update:", exc_info=context.error)
+    
+    # Log error with full context
+    if isinstance(update, Update):
+        log_error_context(context.error, update, context)
 
     tb_string = traceback.format_exception(
         type(context.error), context.error, context.error.__traceback__
@@ -280,6 +300,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route plain text messages based on user_data state."""
+    # Log the update
+    log_handler_execution("text_router", update, context)
+    
     state = context.user_data.get("state")
     if not state:
         return
@@ -331,6 +354,9 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route photo messages based on user_data state."""
+    # Log the update
+    log_handler_execution("photo_router", update, context)
+    
     state = context.user_data.get("state")
     if not state:
         return
@@ -376,6 +402,32 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 def register_handlers(app: Application) -> None:
     """Register all handlers with correct priority ordering."""
+    
+    # Add global logging middleware
+    async def logging_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Log all updates with detailed context."""
+        try:
+            # Log callback queries
+            if update.callback_query:
+                user = update.effective_user
+                log_callback_click(
+                    update.callback_query.data,
+                    user.id,
+                    user.username if user else None
+                )
+            
+            # Log commands
+            elif update.message and update.message.text and update.message.text.startswith('/'):
+                user = update.effective_user
+                command = update.message.text.split()[0][1:]  # Remove /
+                args = update.message.text.split()[1:] if len(update.message.text.split()) > 1 else []
+                log_command(command, user.id, user.username if user else None, args)
+        except Exception as e:
+            logger.warning(f"Logging middleware error: {e}")
+    
+    # Register middleware as a handler group with highest priority
+    from telegram.ext import TypeHandler
+    app.add_handler(TypeHandler(Update, logging_middleware), group=-1)
 
     # ======== COMMANDS ========
     app.add_handler(CommandHandler("start", start_handler))
@@ -563,17 +615,22 @@ def main() -> None:
     """Start the bot."""
     import asyncio
     
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
+    # Setup logging FIRST (before any other imports that use logging)
+    telegram_handler = setup_telegram_logging(
+        bot_token=BOT_TOKEN,
+        channel_id=LOG_CHANNEL_ID,
+        enabled=LOG_TO_CHANNEL,
+        channel_level=LOG_CHANNEL_LEVEL,
+        file_level=LOG_LEVEL,
+        full_verbose=FULL_VERBOSE_TO_CHANNEL,
     )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN not set! Check your .env file.")
         return
 
     logger.info("Starting NanoStore Bot...")
+    log_activity("SYSTEM", "Bot starting...")
 
     # Fix for Python 3.14+ event loop issue
     try:
@@ -587,11 +644,23 @@ def main() -> None:
         .post_init(post_init)
         .build()
     )
+    
+    # Store telegram handler in bot_data for access in post_init
+    if telegram_handler:
+        app.bot_data['telegram_log_handler'] = telegram_handler
 
     register_handlers(app)
 
     logger.info("Bot is running. Press Ctrl+C to stop.")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    log_activity("SYSTEM", "Bot is running and ready")
+    
+    try:
+        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    finally:
+        # Stop telegram handler on shutdown
+        if telegram_handler:
+            telegram_handler.stop()
+            log_activity("SYSTEM", "Bot stopped")
 
 
 if __name__ == "__main__":

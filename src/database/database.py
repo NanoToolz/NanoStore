@@ -877,12 +877,19 @@ async def get_setting(key: str, default: str = "") -> str:
 
 
 async def set_setting(key: str, value: str) -> None:
+    # Get old value for logging
+    old_value = await get_setting(key, None)
+    
     db = await get_db()
     await db.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
         (key, value),
     )
     await db.commit()
+    
+    # Log the setting update
+    from utils.activity_logger import log_db_action
+    log_db_action("UPDATE", f"Setting: {key} = {str(value)[:50]}")
 
 
 async def get_all_settings() -> list:

@@ -15,6 +15,12 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID", "")
 PROOFS_CHANNEL_ID = os.getenv("PROOFS_CHANNEL_ID", "")
 
+# Logging Configuration
+LOG_TO_CHANNEL = os.getenv("LOG_TO_CHANNEL", "true").lower() == "true"
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
+LOG_CHANNEL_LEVEL = os.getenv("LOG_CHANNEL_LEVEL", "INFO").upper()
+FULL_VERBOSE_TO_CHANNEL = os.getenv("FULL_VERBOSE_TO_CHANNEL", "false").lower() == "true"
+
 # Database Configuration
 DB_PATH = str(root_dir / "data" / "nanostore.db")
 
