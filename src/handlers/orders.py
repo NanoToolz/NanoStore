@@ -26,14 +26,14 @@ from database import (
     decrement_stock,
     add_action_log,
 )
-from helpers import (
+from utils import (
     safe_edit,
     html_escape,
     separator,
     status_emoji,
     log_action,
 )
-from keyboards import (
+from utils import (
     checkout_kb,
     payment_methods_kb,
     order_detail_kb,
@@ -532,7 +532,7 @@ async def _show_orders_page(query, user_id: int, page: int = 1) -> None:
     text += f"\n📊 Total: {total_orders} orders"
 
     # Use render_screen with orders_image_id
-    from helpers import render_screen
+    from utils import render_screen
     await render_screen(
         query=query,
         bot=query.message.get_bot(),

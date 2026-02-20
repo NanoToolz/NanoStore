@@ -17,8 +17,8 @@ from database import (
     get_user,
     add_action_log,
 )
-from helpers import safe_edit, html_escape, separator, log_action
-from keyboards import back_kb
+from utils import safe_edit, html_escape, separator, log_action
+from utils import back_kb
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     rows.append([Btn("◀️ Main Menu", callback_data="main_menu")])
 
     # Use render_screen with support_image_id
-    from helpers import render_screen
+    from utils import render_screen
     await render_screen(
         query=query,
         bot=context.bot,

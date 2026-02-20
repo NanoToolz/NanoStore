@@ -14,8 +14,8 @@ from database import (
     get_payment_method,
     add_action_log,
 )
-from helpers import safe_edit, html_escape, separator, status_emoji
-from keyboards import (
+from utils import safe_edit, html_escape, separator, status_emoji
+from utils import (
     wallet_kb,
     wallet_topup_amounts_kb,
     wallet_pay_methods_kb,
@@ -48,7 +48,7 @@ async def wallet_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
     
     # Use render_screen with wallet_image_id
-    from helpers import render_screen
+    from utils import render_screen
     await render_screen(
         query=query,
         bot=context.bot,

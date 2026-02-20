@@ -4,8 +4,8 @@ import logging
 from telegram import Update, InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import search_products, get_setting
-from helpers import safe_edit, html_escape, separator
-from keyboards import back_kb
+from utils import safe_edit, html_escape, separator
+from utils import back_kb
 
 logger = logging.getLogger(__name__)
 

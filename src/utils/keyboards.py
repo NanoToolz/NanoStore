@@ -4,6 +4,19 @@ import math
 from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 
 
+# ════════════════════════ SCREEN CONTENT MANAGER ════════════════════════
+
+CONTENT_SCREENS = [
+    ("welcome", "🏠 Welcome Screen"),
+    ("shop", "🛍️ Shop"),
+    ("cart", "🛒 Cart"),
+    ("orders", "📦 Orders"),
+    ("wallet", "💳 Wallet"),
+    ("support", "🎫 Support"),
+    ("admin_panel", "⚙️ Admin Panel"),
+]
+
+
 # ════════════════════════ COMMON ════════════════════════
 
 def back_kb(target: str) -> InlineKeyboardMarkup:
@@ -34,25 +47,44 @@ def back_kb(target: str) -> InlineKeyboardMarkup:
 
 # ════════════════════════ MAIN MENU ════════════════════════
 
-def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """Main menu keyboard.
+def welcome_kb() -> InlineKeyboardMarkup:
+    """Welcome screen keyboard - single button to go to main menu."""
+    return InlineKeyboardMarkup([
+        [Btn("🚀 Go to Main Menu", callback_data="main_menu")]
+    ])
+
+
+def main_menu_kb(is_admin: bool = False, cart_count: int = 0) -> InlineKeyboardMarkup:
+    """Main menu keyboard (hub only - no welcome content).
 
     Layout (user request):
     Row 1: 🛍️ Shop
-    Row 2: 🛒 Cart | 📦 My Orders
+    Row 2: 🛒 Cart (with count) | 📦 My Orders
     Row 3: 🎫 Support | ❓ Help
     Row 4: 🔍 Search | 💳 My Wallet
     Last (admin only): ⚙️ Admin Panel
     """
+    cart_label = f"🛒 Cart ({cart_count})" if cart_count > 0 else "🛒 Cart"
+    
     rows = [
         [Btn("🛍️ Shop", callback_data="shop")],
-        [Btn("🛒 Cart", callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
+        [Btn(cart_label, callback_data="cart"), Btn("📦 My Orders", callback_data="my_orders")],
         [Btn("🎫 Support", callback_data="support"), Btn("❓ Help", callback_data="help")],
         [Btn("🔍 Search", callback_data="search"), Btn("💳 My Wallet", callback_data="wallet")],
     ]
     if is_admin:
         rows.append([Btn("⚙️ Admin Panel", callback_data="admin")])
     return InlineKeyboardMarkup(rows)
+
+
+def home_kb() -> InlineKeyboardMarkup:
+    """Single 'Home' button to return to main menu."""
+    return InlineKeyboardMarkup([[Btn("🏠 Home", callback_data="main_menu")]])
+
+
+def back_home_kb() -> InlineKeyboardMarkup:
+    """Alias for home_kb()."""
+    return home_kb()
 
 
 def force_join_kb(channels: list) -> InlineKeyboardMarkup:
@@ -276,6 +308,7 @@ def admin_kb(pending_proofs: int = 0, open_tickets: int = 0, pending_topups: int
         [Btn("💳 Payments", callback_data="adm_payments"), Btn(f"📸 Proofs{proof_badge}", callback_data="adm_proofs")],
         [Btn(f"💳 Top-Ups{topup_badge}", callback_data="adm_topups"), Btn(f"🎫 Tickets{ticket_badge}", callback_data="adm_tickets")],
         [Btn("⚙️ Settings", callback_data="adm_settings"), Btn("📢 Force Join", callback_data="adm_fj")],
+        [Btn("🎨 Screen Content", callback_data="adm_content")],
         [Btn("📣 Broadcast", callback_data="adm_broadcast"), Btn("📥 Bulk Import", callback_data="adm_bulk")],
         [Btn("📊 Bulk Stock", callback_data="adm_bulk_stock")],
         [Btn("◀️ Main Menu", callback_data="main_menu")],
@@ -741,3 +774,26 @@ def admin_topup_detail_kb(topup_id: int) -> InlineKeyboardMarkup:
         ],
         [Btn("◀️ Top-Ups", callback_data="adm_topups")],
     ])
+
+
+# ════════════════════════ ADMIN: SCREEN CONTENT MANAGER ════════════════════════
+
+def admin_content_kb() -> InlineKeyboardMarkup:
+    """Admin Screen Content Manager - list all screens."""
+    rows = []
+    for screen_key, screen_label in CONTENT_SCREENS:
+        rows.append([Btn(screen_label, callback_data=f"adm_content_screen:{screen_key}")])
+    rows.append([Btn("◀️ Admin Panel", callback_data="admin")])
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_content_screen_kb(screen_key: str) -> InlineKeyboardMarkup:
+    """Admin Screen Content Manager - edit specific screen."""
+    rows = [
+        [Btn("🖼️ Set Image", callback_data=f"adm_content_img:{screen_key}")],
+        [Btn("📝 Set Text", callback_data=f"adm_content_txt:{screen_key}")],
+        [Btn("🗑️ Clear Image", callback_data=f"adm_content_img_clear:{screen_key}")],
+        [Btn("🗑️ Clear Text", callback_data=f"adm_content_txt_clear:{screen_key}")],
+        [Btn("◀️ Screen Content", callback_data="adm_content")],
+    ]
+    return InlineKeyboardMarkup(rows)

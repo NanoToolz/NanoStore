@@ -11,8 +11,8 @@ from database import (
     add_action_log,
     get_user,
 )
-from helpers import safe_edit, html_escape, separator, format_price, log_action
-from keyboards import back_kb
+from utils import safe_edit, html_escape, separator, format_price, log_action
+from utils import back_kb
 
 logger = logging.getLogger(__name__)
 

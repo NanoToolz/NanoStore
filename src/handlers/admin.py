@@ -34,12 +34,12 @@ from database import (
     add_product_media, delete_product_media, get_product_media,
     add_action_log, search_products, get_open_ticket_count,
 )
-from helpers import (
+from utils import (
     safe_edit, separator, send_typing, notify_log_channel,
     format_price, format_stock, status_emoji, delivery_icon, html_escape,
     auto_delete,
 )
-from keyboards import (
+from utils import (
     admin_kb, admin_cats_kb, admin_cat_detail_kb,
     admin_prods_kb, admin_prod_detail_kb,
     admin_orders_kb, admin_order_detail_kb,
@@ -60,9 +60,9 @@ def _is_admin(user_id: int) -> bool:
 # ════════════════════════ MAIN ADMIN PANEL ════════════════════════
 
 async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Admin panel main screen.
+    """Admin panel main screen with render_screen support.
     
-    Uses safe_edit to avoid deleting messages.
+    Uses render_screen with admin_panel_image_id.
     """
     query = update.callback_query
     await query.answer()
@@ -73,8 +73,6 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     context.user_data.pop("state", None)
     context.user_data.pop("temp", None)
-
-    await send_typing(query.message.chat_id, context.bot)
 
     stats = await get_dashboard_stats()
     currency = await get_setting("currency", "Rs")
@@ -88,8 +86,17 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"🎫 Tickets: <b>{stats['open_tickets']}</b>  |  💳 Top-Ups: <b>{stats['pending_topups']}</b>"
     )
     
-    # Use safe_edit to avoid deleting messages
-    await safe_edit(query, text, reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]))
+    # Use render_screen with admin_panel_image_id
+    from utils import render_screen
+    await render_screen(
+        query=query,
+        bot=context.bot,
+        chat_id=query.message.chat_id,
+        text=text,
+        reply_markup=admin_kb(stats["pending_proofs"], stats["open_tickets"], stats["pending_topups"]),
+        image_setting_key="admin_panel_image_id",
+        admin_id=ADMIN_ID
+    )
 
 
 async def back_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1177,7 +1184,7 @@ async def admin_img_panel_handler(update: Update, context: ContextTypes.DEFAULT_
         "👇 Configure global or per-screen content:"
     )
     
-    from keyboards import admin_images_kb
+    from utils import admin_images_kb
     await safe_edit(query, text, reply_markup=admin_images_kb(statuses))
 
 
@@ -1511,7 +1518,7 @@ async def admin_topups_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     from database import get_pending_topups
     topups = await get_pending_topups()
     currency = await get_setting("currency", "Rs")
-    from keyboards import admin_topups_kb
+    from utils import admin_topups_kb
     await safe_edit(
         query,
         f"💳 <b>Pending Top-Ups</b>\n{separator()}\n\n⏳ {len(topups)} awaiting review",
@@ -1547,7 +1554,7 @@ async def admin_topup_detail_handler(update: Update, context: ContextTypes.DEFAU
         f"📅 {str(topup.get('created_at', 'N/A'))[:16]}"
     )
 
-    from keyboards import admin_topup_detail_kb
+    from utils import admin_topup_detail_kb
     if topup.get("proof_file_id"):
         try:
             await query.message.chat.send_photo(
@@ -1610,7 +1617,7 @@ async def admin_topup_approve_handler(update: Update, context: ContextTypes.DEFA
     await query.answer("✅ Top-up approved!", show_alert=True)
 
     from database import get_pending_topups
-    from keyboards import admin_topups_kb
+    from utils import admin_topups_kb
     topups = await get_pending_topups()
     await safe_edit(
         query,
@@ -2055,7 +2062,7 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         logger.info(f"✅ Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
         
         # 3. Schedule deletion of confirmation (bot's own message - MUST work)
-        from helpers import schedule_delete
+        from utils import schedule_delete
         schedule_delete(context, msg.chat_id, msg.message_id, delay=7)
         
         # 4. Try to delete admin's text message (best effort)
@@ -2169,7 +2176,7 @@ async def admin_photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.info(f"✅ Sent confirmation message (chat={msg.chat_id}, msg={msg.message_id})")
         
         # 3. Schedule deletion of confirmation (bot's own message - MUST work)
-        from helpers import schedule_delete
+        from utils import schedule_delete
         schedule_delete(context, msg.chat_id, msg.message_id, delay=7)
         
         # 4. DO NOT delete admin's photo message (per requirement: default OFF)

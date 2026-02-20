@@ -15,8 +15,8 @@ from database import (
     get_product_media,
     add_to_cart,
 )
-from helpers import safe_edit, format_stock, html_escape, separator
-from keyboards import (
+from utils import safe_edit, format_stock, html_escape, separator
+from utils import (
     categories_kb,
     products_kb,
     product_detail_kb,
@@ -52,7 +52,7 @@ async def shop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     kb = categories_kb(cats)
 
     # Use render_screen with shop_image_id (NO fallback to welcome)
-    from helpers import render_screen
+    from utils import render_screen
     await render_screen(
         query=query,
         bot=context.bot,

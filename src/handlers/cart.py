@@ -12,8 +12,8 @@ from database import (
     clear_cart,
     get_setting,
 )
-from helpers import safe_edit, html_escape, separator
-from keyboards import cart_kb, empty_cart_kb
+from utils import safe_edit, html_escape, separator
+from utils import cart_kb, empty_cart_kb
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ async def _show_cart(query, user_id: int) -> None:
     text += f"{separator()}\n💰 <b>Total: {currency} {total_display}</b>"
 
     # Use render_screen with cart_image_id
-    from helpers import render_screen
+    from utils import render_screen
     await render_screen(
         query=query,
         bot=query.message.get_bot(),

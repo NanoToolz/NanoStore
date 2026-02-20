@@ -215,6 +215,7 @@ async def init_db() -> None:
         "support_text": "",
         "admin_panel_image_id": "",
         "admin_panel_text": "",
+        "global_banner_image_id": "",
         "min_order": "0",
         "topup_enabled": "on",
         "topup_min_amount": "100",

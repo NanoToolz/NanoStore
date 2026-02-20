@@ -1,29 +1,74 @@
-# Database
-nanostore.db
-store.db
-*.db
-
-# Environment
-.env
-
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Testing
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.cover
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+.cache/
 
 # OS
-.DS_Store
 Thumbs.db
+.DS_Store
 
-# Assets (optional local files)
-assets/
+# Project specific
+prototype/
+tests/
+docs/_build/
