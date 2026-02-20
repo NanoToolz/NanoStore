@@ -220,8 +220,13 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"Welcome back, {html_escape(first_name)}! Choose an option below:"
     )
     
+    # Log the action
+    logger.info(f"Main menu accessed | Editing message in place | user_id={user.id}")
+    
     # Edit the existing message - NEVER delete, NEVER send new
     await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))
+    
+    logger.info(f"Main menu rendered successfully | action=edited_message")
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

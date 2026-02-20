@@ -79,7 +79,7 @@ def log_update(update: Update, context: ContextTypes.DEFAULT_TYPE, handler_name:
 
 def log_callback_click(callback_data: str, user_id: int, username: Optional[str] = None) -> None:
     """
-    Log callback button click.
+    Log callback button click with detailed context.
     
     Args:
         callback_data: Callback data from button
@@ -90,7 +90,11 @@ def log_callback_click(callback_data: str, user_id: int, username: Optional[str]
     if username:
         user_str += f" (@{username})"
     
-    log_activity("CLICK", f"{callback_data} by {user_str}")
+    # Enhanced log with more details
+    log_activity("CLICK", f"{callback_data} | user={user_str}")
+    
+    # Also log to INFO level for channel streaming
+    logger.info(f"[CLICK] {callback_data} | user_id={user_id} | username={username or 'none'}")
 
 
 def log_command(command: str, user_id: int, username: Optional[str] = None, args: list = None) -> None:

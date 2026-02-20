@@ -405,13 +405,32 @@ def register_handlers(app: Application) -> None:
     
     # Add global logging middleware
     async def logging_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Log all updates with detailed context."""
+        """Log all updates with detailed context to Telegram channel."""
         try:
-            # Log callback queries
+            # Log callback queries with full details
             if update.callback_query:
                 user = update.effective_user
+                query = update.callback_query
+                chat_id = query.message.chat_id if query.message else "unknown"
+                msg_id = query.message.message_id if query.message else "unknown"
+                
+                # Get current state
+                state = context.user_data.get("state", "none")
+                
+                # Detailed log for channel
+                details = (
+                    f"CLICK: {query.data} | "
+                    f"user_id={user.id} | "
+                    f"username={user.username or 'none'} | "
+                    f"chat_id={chat_id} | "
+                    f"msg_id={msg_id} | "
+                    f"state={state}"
+                )
+                logger.info(details)
+                
+                # Also use activity logger
                 log_callback_click(
-                    update.callback_query.data,
+                    query.data,
                     user.id,
                     user.username if user else None
                 )
@@ -421,6 +440,15 @@ def register_handlers(app: Application) -> None:
                 user = update.effective_user
                 command = update.message.text.split()[0][1:]  # Remove /
                 args = update.message.text.split()[1:] if len(update.message.text.split()) > 1 else []
+                
+                details = (
+                    f"COMMAND: /{command} | "
+                    f"user_id={user.id} | "
+                    f"username={user.username or 'none'} | "
+                    f"args={args}"
+                )
+                logger.info(details)
+                
                 log_command(command, user.id, user.username if user else None, args)
         except Exception as e:
             logger.warning(f"Logging middleware error: {e}")

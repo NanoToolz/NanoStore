@@ -60,7 +60,7 @@ def _is_admin(user_id: int) -> bool:
 # ════════════════════════ MAIN ADMIN PANEL ════════════════════════
 
 async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Admin panel main screen with render_screen support.
+    """Admin panel main screen - EDITS IN PLACE, never deletes message.
     
     Uses render_screen with admin_panel_image_id.
     """
@@ -69,6 +69,7 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if not _is_admin(update.effective_user.id):
         await query.answer("⛔ Access denied.", show_alert=True)
+        logger.warning(f"Non-admin user {update.effective_user.id} tried to access admin panel")
         return
 
     context.user_data.pop("state", None)
@@ -86,7 +87,10 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"🎫 Tickets: <b>{stats['open_tickets']}</b>  |  💳 Top-Ups: <b>{stats['pending_topups']}</b>"
     )
     
-    # Use render_screen with admin_panel_image_id
+    # Log the action
+    logger.info(f"Admin panel accessed | Editing message in place | user_id={update.effective_user.id}")
+    
+    # Use render_screen with admin_panel_image_id (EDITS IN PLACE)
     from utils import render_screen
     await render_screen(
         query=query,
@@ -97,6 +101,8 @@ async def admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         image_setting_key="admin_panel_image_id",
         admin_id=ADMIN_ID
     )
+    
+    logger.info(f"Admin panel rendered successfully | action=edited_message")
 
 
 async def back_admin_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

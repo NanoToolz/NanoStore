@@ -204,7 +204,7 @@ async def render_screen(
 ) -> Optional[Message]:
     """
     Render a screen with optional image using 3-tier priority system.
-    Handles invalid file_id gracefully by clearing it and falling back to text.
+    EDIT IN PLACE - never deletes the current message.
     
     Args:
         query: CallbackQuery object
@@ -217,7 +217,7 @@ async def render_screen(
         parse_mode: Parse mode (default: HTML)
     
     Returns:
-        Sent/edited Message object or None
+        Edited/sent Message object or None
     """
     import database
     
@@ -225,57 +225,50 @@ async def render_screen(
     if image_setting_key:
         file_id = await resolve_image_id(image_setting_key, database)
     
-    # Try sending with image if available
-    if file_id:
-        try:
-            # Delete old message (only if query exists)
-            if query:
-                try:
-                    await query.message.delete()
-                except Exception:
-                    pass
-            
-            # Send new message with photo
-            return await bot.send_photo(
-                chat_id=chat_id,
-                photo=file_id,
-                caption=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode,
-            )
-        except BadRequest as e:
-            error_msg = str(e).lower()
-            if "wrong file identifier" in error_msg or "file_id" in error_msg:
-                logger.warning(f"Invalid file_id for {image_setting_key}: {file_id}. Clearing setting.")
-                
-                # Clear the invalid image setting
-                if image_setting_key:
-                    await database.set_setting(image_setting_key, "")
-                
-                # Notify admin about the issue
-                if admin_id:
-                    try:
-                        await send_restart_notification(
-                            bot=bot,
-                            admin_id=admin_id,
-                            message=f"⚠️ Invalid image detected for <b>{image_setting_key}</b> and has been cleared. Please re-upload.",
-                            auto_delete_seconds=60
-                        )
-                    except Exception:
-                        pass
-                
-                # Fall through to text-only rendering
-            else:
-                logger.error(f"BadRequest sending photo for {image_setting_key}: {e}")
-        except Exception as e:
-            logger.error(f"Error sending photo for {image_setting_key}: {e}")
-    
-    # Fallback: text-only message
+    # If we have a query (callback), always edit in place
     if query:
-        # Edit existing message (for callback queries)
+        # Check if current message has photo
+        current_has_photo = query.message.photo is not None and len(query.message.photo) > 0
+        
+        # If we want to show image AND current message has photo
+        if file_id and current_has_photo:
+            try:
+                # Edit caption of existing photo message
+                return await query.message.edit_caption(
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode,
+                )
+            except BadRequest as e:
+                error_msg = str(e).lower()
+                if "wrong file identifier" in error_msg or "file_id" in error_msg:
+                    logger.warning(f"Invalid file_id for {image_setting_key}: {file_id}. Clearing setting.")
+                    if image_setting_key:
+                        await database.set_setting(image_setting_key, "")
+                    # Fall through to text edit
+                elif "message is not modified" not in error_msg:
+                    logger.error(f"BadRequest editing caption for {image_setting_key}: {e}")
+            except Exception as e:
+                logger.error(f"Error editing caption for {image_setting_key}: {e}")
+        
+        # Otherwise, edit as text message (works for both text and photo messages)
         return await safe_edit(query, text, reply_markup=reply_markup, parse_mode=parse_mode)
+    
     else:
-        # Send new message (for commands like /start)
+        # No query - this is a new message (e.g., from /start command)
+        if file_id:
+            try:
+                return await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=file_id,
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode,
+                )
+            except Exception as e:
+                logger.error(f"Error sending photo for {image_setting_key}: {e}")
+        
+        # Fallback to text message
         return await bot.send_message(
             chat_id=chat_id,
             text=text,
