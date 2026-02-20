@@ -559,36 +559,29 @@ def admin_fj_kb(channels: list) -> InlineKeyboardMarkup:
 # ---- Admin: Settings ----
 
 def admin_settings_kb() -> InlineKeyboardMarkup:
-    """Admin settings keyboard with compact 2x style."""
+    """Admin settings keyboard with compact 2x style - CLEANED UP."""
     rows = [
         [
-            Btn("🏪 Name", callback_data="adm_set:bot_name"),
-            Btn("💰 Curr", callback_data="adm_set:currency"),
-        ],
-        [
-            Btn("👋 Welcome", callback_data="adm_set:welcome_text"),
-            Btn("🧩 Screen Content", callback_data="adm_img_panel"),
-        ],
-        [
+            Btn("💰 Currency", callback_data="adm_set:currency"),
             Btn("🛒 Min Order", callback_data="adm_set:min_order"),
+        ],
+        [
             Btn("🎁 Reward", callback_data="adm_set:daily_reward"),
-        ],
-        [
             Btn("💳 Top-Up On/Off", callback_data="adm_set:topup_enabled"),
+        ],
+        [
             Btn("💵 Min Top-Up", callback_data="adm_set:topup_min_amount"),
-        ],
-        [
             Btn("💸 Max Top-Up", callback_data="adm_set:topup_max_amount"),
+        ],
+        [
             Btn("🎁 Bonus %", callback_data="adm_set:topup_bonus_percent"),
+            Btn("🔧 Maintenance", callback_data="adm_set:maintenance"),
         ],
         [
-            Btn("⏱️ Auto-Del", callback_data="adm_set:auto_delete"),
-            Btn("🔧 Maint", callback_data="adm_set:maintenance"),
-        ],
-        [
-            Btn("📝 Maint Txt", callback_data="adm_set:maintenance_text"),
+            Btn("📝 Maintenance Text", callback_data="adm_set:maintenance_text"),
             Btn("💳 Pay Info", callback_data="adm_set:payment_instructions"),
         ],
+        [Btn("🎨 Screen Content", callback_data="adm_img_panel")],
         [Btn("◀️ Admin Panel", callback_data="admin")],
     ]
     return InlineKeyboardMarkup(rows)

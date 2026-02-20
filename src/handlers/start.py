@@ -256,9 +256,18 @@ async def noop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def verify_join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Placeholder for force join verification (simplified version)."""
+    """Verify user has joined required channels."""
     query = update.callback_query
-    await query.answer("✅ Verified!", show_alert=True)
+    await query.answer()
     
-    # Redirect to main menu
-    await main_menu_handler(update, context)
+    # Import membership check
+    from middleware import check_membership
+    
+    # Check if user is now a member
+    if await check_membership(update, context):
+        await query.answer("✅ Verified! Welcome!", show_alert=True)
+        
+        # Redirect to main menu
+        await main_menu_handler(update, context)
+    else:
+        await query.answer("⚠️ Please join all channels first!", show_alert=True)

@@ -887,9 +887,13 @@ async def set_setting(key: str, value: str) -> None:
     )
     await db.commit()
     
-    # Log the setting update
+    # Log the setting update with special attention to global image
     from utils.activity_logger import log_db_action
-    log_db_action("UPDATE", f"Setting: {key} = {str(value)[:50]}")
+    if key == "global_ui_image_id":
+        logger.warning(f"GLOBAL IMAGE CHANGED: '{old_value}' → '{value}'")
+        log_db_action("UPDATE", f"GLOBAL_IMAGE: {old_value[:20] if old_value else 'None'} → {value[:20] if value else 'None'}")
+    else:
+        log_db_action("UPDATE", f"Setting: {key} = {str(value)[:50]}")
 
 
 async def get_all_settings() -> list:

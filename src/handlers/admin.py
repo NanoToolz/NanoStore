@@ -1028,35 +1028,41 @@ async def admin_settings_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     # Fetch all current values to display inline
-    bot_name     = await get_setting("bot_name", "NanoStore")
     currency     = await get_setting("currency", "Rs")
-    welcome_img  = await get_setting("welcome_image_id", "")
     min_order    = await get_setting("min_order", "0")
     daily_reward = await get_setting("daily_reward", "10")
     maintenance  = await get_setting("maintenance", "off")
-    auto_del     = await get_setting("auto_delete", "0")
+    topup_enabled = await get_setting("topup_enabled", "on")
+    topup_min = await get_setting("topup_min_amount", "100")
+    topup_max = await get_setting("topup_max_amount", "50000")
+    topup_bonus = await get_setting("topup_bonus_percent", "0")
 
-    img_badge   = "✅" if welcome_img else "❌"
     maint_badge = "🔴 ON" if maintenance == "on" else "🟢 OFF"
-    autodel_badge = f"{auto_del}s" if int(auto_del) > 0 else "Off"
+    topup_badge = "🟢 ON" if topup_enabled == "on" else "🔴 OFF"
 
     text = (
         f"⚙️ <b>Bot Settings</b>\n"
         f"{separator()}\n\n"
-        f"🏪 Store: <b>{html_escape(bot_name)}</b>\n"
-        f"💰 Currency: <b>{html_escape(currency)}</b>\n"
-        f"🖼️ Welcome Image: <b>{img_badge}</b>\n"
-        f"🛒 Min Order: <b>{currency} {min_order}</b>\n"
-        f"🎁 Daily Reward: <b>{currency} {daily_reward}</b>\n"
-        f"🔧 Maintenance: <b>{maint_badge}</b>\n"
-        f"⏱️ Auto-Delete: <b>{autodel_badge}</b>\n\n"
+        f"<b>💰 Commerce Settings:</b>\n"
+        f"• Currency: <b>{html_escape(currency)}</b>\n"
+        f"• Min Order: <b>{currency} {min_order}</b>\n"
+        f"• Daily Reward: <b>{currency} {daily_reward}</b>\n\n"
+        f"<b>💳 Top-Up Settings:</b>\n"
+        f"• Status: <b>{topup_badge}</b>\n"
+        f"• Min Amount: <b>{currency} {topup_min}</b>\n"
+        f"• Max Amount: <b>{currency} {topup_max}</b>\n"
+        f"• Bonus: <b>{topup_bonus}%</b>\n\n"
+        f"<b>🔧 System:</b>\n"
+        f"• Maintenance: <b>{maint_badge}</b>\n\n"
+        f"<b>🎨 Content & Images:</b>\n"
+        f"• Use 'Screen Content' button below\n\n"
         "👇 Tap a setting to edit:"
     )
     await safe_edit(query, text, reply_markup=admin_settings_kb())
 
 
 async def admin_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Edit a text-based setting OR toggle maintenance mode."""
+    """Edit a text-based setting OR toggle maintenance/topup mode."""
     query = update.callback_query
     await query.answer()
     if not _is_admin(update.effective_user.id):
@@ -1064,13 +1070,24 @@ async def admin_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     key = query.data.split(":")[1]
 
-    # Maintenance and auto-delete timer are special cases
+    # Maintenance and topup_enabled are toggle switches
     if key == "maintenance":
         current = await get_setting("maintenance", "off")
         new_val = "on" if current == "off" else "off"
         await set_setting("maintenance", new_val)
         badge = "🔴 ON" if new_val == "on" else "🟢 OFF"
         await query.answer(f"✅ Maintenance: {badge}", show_alert=True)
+        logger.info(f"Maintenance mode toggled to {new_val} by admin")
+        await admin_settings_handler(update, context)
+        return
+    
+    if key == "topup_enabled":
+        current = await get_setting("topup_enabled", "on")
+        new_val = "on" if current == "off" else "off"
+        await set_setting("topup_enabled", new_val)
+        badge = "🟢 ON" if new_val == "on" else "🔴 OFF"
+        await query.answer(f"✅ Top-Up: {badge}", show_alert=True)
+        logger.info(f"Top-up toggled to {new_val} by admin")
         await admin_settings_handler(update, context)
         return
 
@@ -1078,21 +1095,22 @@ async def admin_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data["state"] = f"adm_set:{key}"
 
     labels = {
-        "bot_name":             "Store Name",
         "currency":             "Currency Symbol",
-        "welcome_text":         "Welcome Text (HTML supported)",
         "min_order":            "Minimum Order Amount",
         "daily_reward":         "Daily Reward Amount",
-        "auto_delete":          "Auto-Delete Timer (seconds)",
+        "topup_min_amount":     "Minimum Top-Up Amount",
+        "topup_max_amount":     "Maximum Top-Up Amount",
+        "topup_bonus_percent":  "Top-Up Bonus Percentage",
         "maintenance_text":     "Maintenance Message",
         "payment_instructions": "Payment Instructions",
     }
     hints = {
         "currency":             "e.g. <code>Rs</code>  <code>$</code>  <code>€</code>",
-        "welcome_text":         "Supports HTML: <code>&lt;b&gt;bold&lt;/b&gt;</code> etc.",
         "min_order":            "Cart minimum total. Example: <code>100</code>",
         "daily_reward":         "Balance added daily. Example: <code>25</code>",
-        "auto_delete":          "<code>0</code> = disabled | <code>30</code> = delete after 30s",
+        "topup_min_amount":     "Minimum top-up. Example: <code>100</code>",
+        "topup_max_amount":     "Maximum top-up. Example: <code>50000</code>",
+        "topup_bonus_percent":  "Bonus percentage. Example: <code>5</code> for 5%",
         "maintenance_text":     "Message shown to users when maintenance is ON.",
         "payment_instructions": "Extra text shown on the payment screen.",
     }

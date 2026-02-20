@@ -24,6 +24,8 @@ from utils.activity_logger import (
     log_activity, log_update, log_callback_click, log_command,
     log_error_context, log_handler_execution
 )
+from middleware import enforce_membership
+from middleware.maintenance import check_maintenance
 from database import init_db
 from handlers.start import (
     start_handler,
@@ -453,8 +455,29 @@ def register_handlers(app: Application) -> None:
         except Exception as e:
             logger.warning(f"Logging middleware error: {e}")
     
-    # Register middleware as a handler group with highest priority
+    # Register middleware as handler groups with highest priority
     from telegram.ext import TypeHandler
+    
+    # Add global middleware for maintenance and membership checks
+    async def global_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Check maintenance mode and membership before processing."""
+        try:
+            # Skip middleware for /start command (let it handle membership internally)
+            if update.message and update.message.text and update.message.text.startswith('/start'):
+                return
+            
+            # Check maintenance mode first
+            if not await check_maintenance(update, context):
+                return  # Blocked by maintenance
+            
+            # Check membership for all actions (clicks and messages)
+            if not await enforce_membership(update, context):
+                return  # Blocked by membership requirement
+        
+        except Exception as e:
+            logger.warning(f"Global middleware error: {e}")
+    
+    app.add_handler(TypeHandler(Update, global_middleware), group=-2)
     app.add_handler(TypeHandler(Update, logging_middleware), group=-1)
 
     # ======== COMMANDS ========

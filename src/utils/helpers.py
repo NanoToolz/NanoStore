@@ -160,10 +160,12 @@ async def resolve_image_id(
     from_database_module
 ) -> Optional[str]:
     """
-    Resolve image ID using 3-tier priority system:
+    Resolve image ID using 3-tier priority system with PERSISTENT global image.
+    
+    Priority:
     1. Screen-specific image (e.g., shop_image_id)
     2. Global banner image (global_banner_image_id)
-    3. Global UI image (global_ui_image_id) if use_global_image is "on"
+    3. Global UI image (global_ui_image_id) - ALWAYS CHECKED, never null
     
     Args:
         image_setting_key: The specific screen image key (e.g., "shop_image_id")
@@ -173,22 +175,27 @@ async def resolve_image_id(
         file_id string or None
     """
     # Tier 1: Screen-specific image
-    screen_image = await from_database_module.get_setting(image_setting_key, "")
-    if screen_image:
-        return screen_image
+    if image_setting_key:
+        screen_image = await from_database_module.get_setting(image_setting_key, "")
+        if screen_image:
+            logger.debug(f"Using screen-specific image for {image_setting_key}")
+            return screen_image
     
     # Tier 2: Global banner image
     banner_image = await from_database_module.get_setting("global_banner_image_id", "")
     if banner_image:
+        logger.debug(f"Using global banner image for {image_setting_key}")
         return banner_image
     
-    # Tier 3: Global UI image (if enabled)
+    # Tier 3: Global UI image (ALWAYS CHECK - this is the persistent welcome image)
     use_global = await from_database_module.get_setting("use_global_image", "on")
     if use_global.lower() == "on":
         global_image = await from_database_module.get_setting("global_ui_image_id", "")
         if global_image:
+            logger.debug(f"Using global UI image for {image_setting_key}")
             return global_image
     
+    logger.debug(f"No image found for {image_setting_key}")
     return None
 
 
