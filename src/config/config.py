@@ -15,14 +15,20 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 # Load LOG_CHANNEL_ID and convert to int if present
 _log_channel_raw = os.getenv("LOG_CHANNEL_ID", "")
+print(f"🔍 DEBUG: Raw LOG_CHANNEL_ID from .env = '{_log_channel_raw}' (type: {type(_log_channel_raw).__name__})")
+
 if _log_channel_raw and _log_channel_raw.strip():
     try:
         LOG_CHANNEL_ID = int(_log_channel_raw.strip())
+        print(f"✅ DEBUG: Converted LOG_CHANNEL_ID to int = {LOG_CHANNEL_ID}")
     except ValueError:
-        print(f"ERROR: Invalid LOG_CHANNEL_ID format: {_log_channel_raw}")
+        print(f"❌ ERROR: Invalid LOG_CHANNEL_ID format: {_log_channel_raw}")
         LOG_CHANNEL_ID = None
 else:
+    print(f"⚠️ DEBUG: LOG_CHANNEL_ID is empty or None")
     LOG_CHANNEL_ID = None
+
+print(f"📊 DEBUG: Final LOG_CHANNEL_ID = {LOG_CHANNEL_ID} (type: {type(LOG_CHANNEL_ID).__name__})")
 
 PROOFS_CHANNEL_ID = os.getenv("PROOFS_CHANNEL_ID", "")
 
