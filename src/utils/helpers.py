@@ -221,11 +221,12 @@ async def render_screen(
     # Try sending with image if available
     if file_id:
         try:
-            # Delete old message
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
+            # Delete old message (only if query exists)
+            if query:
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
             
             # Send new message with photo
             return await bot.send_photo(
@@ -262,8 +263,18 @@ async def render_screen(
         except Exception as e:
             logger.error(f"Error sending photo for {image_setting_key}: {e}")
     
-    # Fallback: text-only message (edit existing)
-    return await safe_edit(query, text, reply_markup=reply_markup, parse_mode=parse_mode)
+    # Fallback: text-only message
+    if query:
+        # Edit existing message (for callback queries)
+        return await safe_edit(query, text, reply_markup=reply_markup, parse_mode=parse_mode)
+    else:
+        # Send new message (for commands like /start)
+        return await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
 
 
 def schedule_delete(
