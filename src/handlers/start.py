@@ -111,7 +111,7 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "Choose an option below:"
     )
     
-    from keyboards import main_menu_kb
+    from utils import main_menu_kb
     await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count))
 
 
