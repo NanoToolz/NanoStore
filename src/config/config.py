@@ -12,7 +12,18 @@ load_dotenv(env_path)
 # Bot Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID", "")
+
+# Load LOG_CHANNEL_ID and convert to int if present
+_log_channel_raw = os.getenv("LOG_CHANNEL_ID", "")
+if _log_channel_raw and _log_channel_raw.strip():
+    try:
+        LOG_CHANNEL_ID = int(_log_channel_raw.strip())
+    except ValueError:
+        print(f"ERROR: Invalid LOG_CHANNEL_ID format: {_log_channel_raw}")
+        LOG_CHANNEL_ID = None
+else:
+    LOG_CHANNEL_ID = None
+
 PROOFS_CHANNEL_ID = os.getenv("PROOFS_CHANNEL_ID", "")
 
 # Logging Configuration

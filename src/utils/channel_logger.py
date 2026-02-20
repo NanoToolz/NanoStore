@@ -20,29 +20,34 @@ class ChannelActivityLogger:
     Provides audit trail for owner to see what happened, when, by whom.
     """
     
-    def __init__(self, bot: Bot, channel_id: str, enabled: bool = True):
+    def __init__(self, bot: Bot, channel_id: int = None, enabled: bool = True):
         """
         Initialize channel logger.
         
         Args:
             bot: Telegram bot instance
-            channel_id: Channel ID to post logs (must start with -100)
+            channel_id: Channel ID to post logs (integer, typically negative for channels)
             enabled: Enable/disable channel logging
         """
         self.bot = bot
         self.channel_id = channel_id
-        self.enabled = enabled
+        self.enabled = enabled and channel_id is not None
         self.failed_logs = []  # Queue for failed logs to retry
         
         logger.info(f"🔧 Initializing ChannelActivityLogger:")
-        logger.info(f"  - Channel ID: {channel_id}")
-        logger.info(f"  - Enabled: {enabled}")
+        logger.info(f"  - Channel ID: {channel_id} (type: {type(channel_id).__name__})")
+        logger.info(f"  - Enabled: {self.enabled}")
         logger.info(f"  - Bot: {bot}")
         
         # Validate channel ID
-        if channel_id and not channel_id.startswith('-100'):
-            logger.error(f"❌ Invalid channel ID: {channel_id}. Must start with -100")
+        if channel_id is None:
+            logger.warning(f"⚠️ Channel ID is None - channel logging disabled")
             self.enabled = False
+        elif not isinstance(channel_id, int):
+            logger.error(f"❌ Invalid channel ID type: {type(channel_id).__name__}. Must be int")
+            self.enabled = False
+        elif channel_id >= 0:
+            logger.warning(f"⚠️ Channel ID {channel_id} is positive - channels usually have negative IDs")
         else:
             logger.info(f"✅ Channel ID format is valid")
     
@@ -68,11 +73,11 @@ class ChannelActivityLogger:
             True if successful, False otherwise
         """
         if not self.enabled:
-            logger.warning(f"Channel logger is DISABLED. enabled={self.enabled}")
+            logger.warning(f"Channel logger is DISABLED. enabled={self.enabled}, channel_id={self.channel_id}")
             return False
         
-        if not self.channel_id:
-            logger.warning(f"Channel ID is EMPTY. channel_id={self.channel_id}")
+        if self.channel_id is None:
+            logger.warning(f"Channel ID is None - cannot post")
             return False
         
         logger.info(f"Attempting to post to channel {self.channel_id}: {message[:100]}...")
