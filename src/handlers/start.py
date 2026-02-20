@@ -1,6 +1,5 @@
 """NanoStore start handlers — /start, main menu, help, noop, force join verify."""
 
-import asyncio
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/start — entry point. Shows 2 messages: welcome (auto-delete 60s) + main menu (persistent)."""
+    """/start — entry point. Sends ONE message with welcome text + inline buttons."""
     user = update.effective_user
     args = context.args
 
@@ -51,16 +50,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if maintenance == "on" and user.id != ADMIN_ID:
         maintenance_text = await get_setting("maintenance_text", "Bot is under maintenance. Please try again later.")
         await update.message.reply_text(
-            f"� <b>Maintenance Mode</b>\n\n{html_escape(maintenance_text)}",
+            f"🔧 <b>Maintenance Mode</b>\n\n{html_escape(maintenance_text)}",
             parse_mode="HTML",
         )
         return
-
-    # 4. Send typing indicator
-    await send_typing(update.effective_chat.id, context.bot)
-
-    # 5. Force join check (simplified - skip for now, can be added later)
-    # TODO: Implement force join verification if needed
 
     # Handle referral if this is a new user
     if referrer_id:
@@ -98,36 +91,41 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception:
         pass
 
-    # MESSAGE A: Detailed welcome (auto-delete after 60s)
+    # Build welcome text with all stats
     welcome_text = await _build_welcome_text(user, context)
-    msg_a = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=welcome_text,
-        parse_mode="HTML"
-    )
-
-    # MESSAGE B: Persistent main menu (never deleted, always edited)
-    main_menu_text = await _build_main_menu_text(user)
     is_admin = user.id == ADMIN_ID
-    msg_b = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=main_menu_text,
-        reply_markup=main_menu_kb(is_admin=is_admin),
-        parse_mode="HTML"
-    )
-
-    # Store MESSAGE B's message_id for future edits
-    context.user_data["menu_msg_id"] = msg_b.message_id
-
-    # Schedule MESSAGE A deletion after 60 seconds
-    async def delete_welcome():
-        try:
-            await asyncio.sleep(60)
-            await msg_a.delete()
-        except Exception as e:
-            logger.debug(f"Could not delete welcome message: {e}")
     
-    asyncio.create_task(delete_welcome())
+    # Check if welcome image is configured
+    welcome_image_id = await get_setting("shop_image_id", "")
+    
+    # Send ONE message with text + inline buttons
+    if welcome_image_id:
+        # Send photo with caption + inline keyboard
+        try:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=welcome_image_id,
+                caption=welcome_text,
+                reply_markup=main_menu_kb(is_admin=is_admin),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send welcome image: {e}, falling back to text")
+            # Fallback to text if image fails
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=welcome_text,
+                reply_markup=main_menu_kb(is_admin=is_admin),
+                parse_mode="HTML"
+            )
+    else:
+        # Send text message with inline keyboard
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=welcome_text,
+            reply_markup=main_menu_kb(is_admin=is_admin),
+            parse_mode="HTML"
+        )
 
     # Log
     await add_action_log("user_start", user.id, f"@{user.username} ({user.first_name})")
@@ -193,21 +191,8 @@ async def _build_welcome_text(user, context: ContextTypes.DEFAULT_TYPE) -> str:
     return text
 
 
-async def _build_main_menu_text(user) -> str:
-    """Build simple main menu text."""
-    store_name = await get_setting("bot_name", "NanoStore")
-    first_name = user.first_name or "User"
-    
-    text = (
-        f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n\n"
-        f"Welcome back, {html_escape(first_name)}! Choose an option below:"
-    )
-    
-    return text
-
-
 async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show Main Menu Hub (callback from button) - edits MESSAGE B."""
+    """Show Main Menu (callback from button) - edits existing message, does NOT resend welcome."""
     query = update.callback_query
     await query.answer()
 
@@ -218,10 +203,17 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data.pop("state", None)
     context.user_data.pop("temp", None)
 
-    main_menu_text = await _build_main_menu_text(user)
+    # Build simple main menu text (NOT the full welcome)
+    store_name = await get_setting("bot_name", "NanoStore")
+    first_name = user.first_name or "User"
     
-    # Edit the persistent message (MESSAGE B) - NEVER delete, NEVER send new
-    await safe_edit(query, main_menu_text, reply_markup=main_menu_kb(is_admin=is_admin))
+    text = (
+        f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n\n"
+        f"Welcome back, {html_escape(first_name)}! Choose an option below:"
+    )
+    
+    # Edit the existing message - NEVER delete, NEVER send new
+    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin))
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
