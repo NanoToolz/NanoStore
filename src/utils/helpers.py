@@ -105,10 +105,11 @@ async def safe_edit(
 ) -> Optional[Message]:
     """
     Safely edit a message. Handles both CallbackQuery and Message objects.
+    Automatically detects if message is photo (uses edit_caption) or text (uses edit_text).
     
     Args:
         obj: Either a CallbackQuery (from update.callback_query) or a Message object
-        text: New message text
+        text: New message text or caption
         reply_markup: Optional keyboard markup
         parse_mode: Parse mode (default: HTML)
     
@@ -119,21 +120,27 @@ async def safe_edit(
         # Handle CallbackQuery
         if hasattr(obj, 'message') and hasattr(obj, 'answer'):
             message = obj.message
+        # Handle Message directly
+        elif hasattr(obj, 'edit_text'):
+            message = obj
+        else:
+            logger.warning(f"safe_edit: Unknown object type {type(obj)}")
+            return None
+        
+        # Check if message has photo (use edit_caption)
+        if message.photo:
+            return await message.edit_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+        # Otherwise use edit_text
+        else:
             return await message.edit_text(
                 text=text,
                 reply_markup=reply_markup,
                 parse_mode=parse_mode,
             )
-        # Handle Message directly
-        elif hasattr(obj, 'edit_text'):
-            return await obj.edit_text(
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode,
-            )
-        else:
-            logger.warning(f"safe_edit: Unknown object type {type(obj)}")
-            return None
     except BadRequest as e:
         if "message is not modified" in str(e).lower():
             logger.debug("Message content unchanged, skipping edit")
