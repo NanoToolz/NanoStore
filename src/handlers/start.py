@@ -271,3 +271,45 @@ async def verify_join_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await main_menu_handler(update, context)
     else:
         await query.answer("⚠️ Please join all channels first!", show_alert=True)
+
+
+
+async def test_channel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test command to verify channel posting works."""
+    user = update.effective_user
+    
+    # Only admin can use this
+    if user.id != ADMIN_ID:
+        return
+    
+    channel_logger = context.bot_data.get('channel_logger')
+    
+    if not channel_logger:
+        await update.message.reply_text(
+            "❌ Channel logger not initialized!",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Send test message
+    await update.message.reply_text(
+        "🧪 Testing channel post...",
+        parse_mode="HTML"
+    )
+    
+    success = await channel_logger.test_channel_post()
+    
+    if success:
+        await update.message.reply_text(
+            "✅ Test message sent to channel successfully!\n"
+            f"Channel ID: <code>{channel_logger.channel_id}</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await update.message.reply_text(
+            f"❌ Failed to send test message!\n"
+            f"Channel ID: <code>{channel_logger.channel_id}</code>\n"
+            f"Enabled: {channel_logger.enabled}\n"
+            f"Check logs for details.",
+            parse_mode="HTML"
+        )

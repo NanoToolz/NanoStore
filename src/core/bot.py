@@ -34,6 +34,7 @@ from handlers.start import (
     help_handler,
     noop_handler,
     verify_join_handler,
+    test_channel_handler,
 )
 from handlers.catalog import (
     shop_handler,
@@ -544,6 +545,7 @@ def register_handlers(app: Application) -> None:
 
     # ======== COMMANDS ========
     app.add_handler(CommandHandler("start", start_handler))
+    app.add_handler(CommandHandler("test_channel", test_channel_handler))
 
     # ======== CALLBACK QUERIES ========
 

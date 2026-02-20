@@ -34,10 +34,17 @@ class ChannelActivityLogger:
         self.enabled = enabled
         self.failed_logs = []  # Queue for failed logs to retry
         
+        logger.info(f"🔧 Initializing ChannelActivityLogger:")
+        logger.info(f"  - Channel ID: {channel_id}")
+        logger.info(f"  - Enabled: {enabled}")
+        logger.info(f"  - Bot: {bot}")
+        
         # Validate channel ID
         if channel_id and not channel_id.startswith('-100'):
-            logger.error(f"Invalid channel ID: {channel_id}. Must start with -100")
+            logger.error(f"❌ Invalid channel ID: {channel_id}. Must start with -100")
             self.enabled = False
+        else:
+            logger.info(f"✅ Channel ID format is valid")
     
     def _get_timestamp(self) -> str:
         """Get current timestamp in Asia/Karachi timezone."""
@@ -60,20 +67,28 @@ class ChannelActivityLogger:
         Returns:
             True if successful, False otherwise
         """
-        if not self.enabled or not self.channel_id:
+        if not self.enabled:
+            logger.warning(f"Channel logger is DISABLED. enabled={self.enabled}")
             return False
         
+        if not self.channel_id:
+            logger.warning(f"Channel ID is EMPTY. channel_id={self.channel_id}")
+            return False
+        
+        logger.info(f"Attempting to post to channel {self.channel_id}: {message[:100]}...")
+        
         try:
-            await self.bot.send_message(
+            result = await self.bot.send_message(
                 chat_id=self.channel_id,
                 text=message,
                 parse_mode=parse_mode
             )
-            logger.debug(f"Posted to channel: {message[:100]}...")
+            logger.info(f"✅ Successfully posted to channel! Message ID: {result.message_id}")
             return True
         
         except TelegramError as e:
-            logger.error(f"Failed to post to channel: {e}")
+            logger.error(f"❌ Failed to post to channel {self.channel_id}: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
             # Store failed log for retry
             self.failed_logs.append({
                 'message': message,
@@ -358,14 +373,21 @@ class ChannelActivityLogger:
     
     async def log_bot_startup(self):
         """Log bot startup."""
+        logger.info("📢 Attempting to log bot startup to channel...")
+        
         message = (
             f"🚀 <b>EVENT: BOT_STARTUP</b>\n"
             f"⏰ Time: {self._get_timestamp()}\n"
             f"✅ Result: Bot started successfully\n"
-            f"📊 Channel logging: {'Enabled' if self.enabled else 'Disabled'}"
+            f"📊 Channel logging: {'Enabled' if self.enabled else 'Disabled'}\n"
+            f"📍 Channel ID: {self.channel_id}"
         )
         
-        await self._send_to_channel(message)
+        result = await self._send_to_channel(message)
+        if result:
+            logger.info("✅ Bot startup logged to channel successfully")
+        else:
+            logger.error("❌ Failed to log bot startup to channel")
     
     async def test_channel_post(self) -> bool:
         """Test channel posting capability."""
