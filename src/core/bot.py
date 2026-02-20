@@ -24,6 +24,7 @@ from utils.activity_logger import (
     log_activity, log_update, log_callback_click, log_command,
     log_error_context, log_handler_execution
 )
+from utils.channel_logger import ChannelActivityLogger, set_channel_logger
 from middleware import enforce_membership
 from middleware.maintenance import check_maintenance
 from database import init_db
@@ -152,6 +153,7 @@ from handlers.admin import (
     admin_topup_reject_handler,
     admin_settings_handler,
     admin_set_handler,
+    admin_test_channel_handler,
     admin_welcome_image_handler,
     admin_img_panel_handler,
     admin_img_set_handler,
@@ -199,6 +201,18 @@ async def post_init(application: Application) -> None:
     if telegram_handler:
         telegram_handler.start()
         log_activity("SYSTEM", "Telegram log channel streaming started")
+    
+    # Initialize Channel Activity Logger
+    channel_logger = ChannelActivityLogger(
+        bot=application.bot,
+        channel_id=LOG_CHANNEL_ID,
+        enabled=LOG_TO_CHANNEL
+    )
+    set_channel_logger(channel_logger)
+    application.bot_data['channel_logger'] = channel_logger
+    
+    # Send bot startup notification to channel
+    await channel_logger.log_bot_startup()
     
     logger.info("Bot initialized. ADMIN_ID=%s", ADMIN_ID)
     log_activity("SYSTEM", f"Bot initialized | Admin: {ADMIN_ID}")
@@ -282,6 +296,20 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                 )
             except Exception:
                 pass
+
+    # Log to channel logger
+    channel_logger = context.bot_data.get('channel_logger')
+    if channel_logger:
+        user_id = None
+        if isinstance(update, Update) and update.effective_user:
+            user_id = update.effective_user.id
+        
+        await channel_logger.log_error(
+            error_type=type(context.error).__name__,
+            error_message=str(context.error),
+            user_id=user_id,
+            context=tb_text[-500:]  # Last 500 chars of traceback
+        )
 
     if LOG_CHANNEL_ID:
         error_text = (
@@ -409,6 +437,8 @@ def register_handlers(app: Application) -> None:
     async def logging_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Log all updates with detailed context to Telegram channel."""
         try:
+            channel_logger = context.bot_data.get('channel_logger')
+            
             # Log callback queries with full details
             if update.callback_query:
                 user = update.effective_user
@@ -436,6 +466,16 @@ def register_handlers(app: Application) -> None:
                     user.id,
                     user.username if user else None
                 )
+                
+                # Log to channel
+                if channel_logger:
+                    await channel_logger.log_button_click(
+                        user_id=user.id,
+                        full_name=user.full_name or "",
+                        username=user.username or "",
+                        callback_data=query.data,
+                        button_name=query.data.split(":")[0] if ":" in query.data else query.data
+                    )
             
             # Log commands
             elif update.message and update.message.text and update.message.text.startswith('/'):
@@ -452,6 +492,28 @@ def register_handlers(app: Application) -> None:
                 logger.info(details)
                 
                 log_command(command, user.id, user.username if user else None, args)
+                
+                # Log to channel
+                if channel_logger:
+                    if command == "start":
+                        await channel_logger.log_user_start(
+                            user_id=user.id,
+                            full_name=user.full_name or "",
+                            username=user.username or "",
+                            args=args
+                        )
+            
+            # Log regular messages
+            elif update.message and update.message.text:
+                user = update.effective_user
+                
+                if channel_logger:
+                    await channel_logger.log_message_received(
+                        user_id=user.id,
+                        full_name=user.full_name or "",
+                        username=user.username or "",
+                        text=update.message.text
+                    )
         except Exception as e:
             logger.warning(f"Logging middleware error: {e}")
     
@@ -615,6 +677,7 @@ def register_handlers(app: Application) -> None:
     # ---- Admin: Settings ----
     app.add_handler(CallbackQueryHandler(admin_settings_handler, pattern=r"^adm_settings$"))
     app.add_handler(CallbackQueryHandler(admin_set_handler, pattern=r"^adm_set:.+$"))
+    app.add_handler(CallbackQueryHandler(admin_test_channel_handler, pattern=r"^adm_test_channel$"))
     app.add_handler(CallbackQueryHandler(admin_welcome_image_handler, pattern=r"^adm_welcome_image$"))
     app.add_handler(CallbackQueryHandler(admin_img_panel_handler, pattern=r"^adm_img_panel$"))
     app.add_handler(CallbackQueryHandler(admin_img_set_handler, pattern=r"^adm_img_set:.+$"))

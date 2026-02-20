@@ -1078,6 +1078,15 @@ async def admin_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         badge = "🔴 ON" if new_val == "on" else "🟢 OFF"
         await query.answer(f"✅ Maintenance: {badge}", show_alert=True)
         logger.info(f"Maintenance mode toggled to {new_val} by admin")
+        
+        # Log to channel
+        channel_logger = context.bot_data.get('channel_logger')
+        if channel_logger:
+            await channel_logger.log_maintenance_toggle(
+                admin_id=update.effective_user.id,
+                enabled=(new_val == "on")
+            )
+        
         await admin_settings_handler(update, context)
         return
     
@@ -1088,6 +1097,16 @@ async def admin_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         badge = "🟢 ON" if new_val == "on" else "🔴 OFF"
         await query.answer(f"✅ Top-Up: {badge}", show_alert=True)
         logger.info(f"Top-up toggled to {new_val} by admin")
+        
+        # Log to channel
+        channel_logger = context.bot_data.get('channel_logger')
+        if channel_logger:
+            await channel_logger.log_admin_action(
+                admin_id=update.effective_user.id,
+                action="Toggle Top-Up",
+                details=f"Top-Up {badge}"
+            )
+        
         await admin_settings_handler(update, context)
         return
 
@@ -1126,6 +1145,27 @@ async def admin_set_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         + (f"\n\n<i>{hint}</i>" if hint else "")
     )
     await safe_edit(query, text, reply_markup=back_kb("adm_settings"))
+
+
+async def admin_test_channel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test channel posting capability."""
+    query = update.callback_query
+    await query.answer()
+    if not _is_admin(update.effective_user.id):
+        return
+    
+    channel_logger = context.bot_data.get('channel_logger')
+    if not channel_logger:
+        await query.answer("❌ Channel logger not initialized!", show_alert=True)
+        return
+    
+    # Test the channel post
+    success = await channel_logger.test_channel_post()
+    
+    if success:
+        await query.answer("✅ Test message sent to channel successfully!", show_alert=True)
+    else:
+        await query.answer("❌ Failed to send test message. Check logs.", show_alert=True)
 
 
 async def admin_welcome_image_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

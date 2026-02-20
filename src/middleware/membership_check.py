@@ -62,7 +62,25 @@ async def enforce_membership(update: Update, context: ContextTypes.DEFAULT_TYPE)
         True if user is member (can proceed)
         False if user needs to join (action blocked)
     """
-    if await check_membership(update, context):
+    user = update.effective_user
+    is_member = await check_membership(update, context)
+    
+    # Log membership check to channel
+    channel_logger = context.bot_data.get('channel_logger')
+    if channel_logger and user:
+        channels = await get_force_join_channels()
+        channel_name = channels[0]["name"] if channels else "Unknown"
+        status = "member" if is_member else "not_member"
+        
+        await channel_logger.log_membership_check(
+            user_id=user.id,
+            full_name=user.full_name or "",
+            username=user.username or "",
+            status=status,
+            channel_name=channel_name
+        )
+    
+    if is_member:
         return True
     
     # Get channels user needs to join

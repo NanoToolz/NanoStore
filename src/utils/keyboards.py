@@ -582,6 +582,7 @@ def admin_settings_kb() -> InlineKeyboardMarkup:
             Btn("💳 Pay Info", callback_data="adm_set:payment_instructions"),
         ],
         [Btn("🎨 Screen Content", callback_data="adm_img_panel")],
+        [Btn("🧪 Test Channel Post", callback_data="adm_test_channel")],
         [Btn("◀️ Admin Panel", callback_data="admin")],
     ]
     return InlineKeyboardMarkup(rows)
