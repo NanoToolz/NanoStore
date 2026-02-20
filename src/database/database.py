@@ -18,6 +18,12 @@ async def get_db() -> aiosqlite.Connection:
     """Get or create DB connection."""
     global _db
     if _db is None:
+        # Ensure data directory exists
+        import os
+        from pathlib import Path
+        db_dir = Path(DB_PATH).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+        
         _db = await aiosqlite.connect(DB_PATH)
         _db.row_factory = aiosqlite.Row
         await _db.execute("PRAGMA journal_mode=WAL")
