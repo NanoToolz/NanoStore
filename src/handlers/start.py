@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/start — entry point. Shows Welcome Splash only."""
+    """/start — entry point. Shows Main Menu directly with image."""
     user = update.effective_user
 
     # Register or update user
@@ -28,81 +28,37 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
 
-    # Show welcome screen
-    await _show_welcome(update, context)
+    # Show main menu directly
+    await _show_main_menu(update, context, is_command=True)
 
     # Log
     await add_action_log("user_start", user.id, f"@{user.username} ({user.first_name})")
 
 
-async def _show_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send welcome splash with profile info and single 'Go to Main Menu' button.
+async def _show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, is_command: bool = False) -> None:
+    """Show Main Menu with image from settings.
     
-    Uses render_screen with welcome_image_id.
+    Args:
+        update: Telegram update
+        context: Bot context
+        is_command: True if called from /start command, False if from callback
     """
     user = update.effective_user
     store_name = await get_setting("bot_name", "NanoStore")
-    custom_msg = await get_setting("welcome_text", "")
-
     currency = await get_setting("currency", "Rs")
-    orders_count = await get_user_order_count(user.id)
-    balance = await get_user_balance(user.id)
-
-    profile_block = (
-        f"👤 <b>Profile</b>\n"
-        f"🆔 <code>{user.id}</code>\n"
-        f"📎 @{html_escape(user.username or 'N/A')}\n"
-        f"🛒 Orders: <b>{orders_count}</b>\n"
-        f"💳 Balance: <b>{currency} {balance}</b>\n\n"
-    )
-
-    if custom_msg:
-        text = custom_msg + "\n\n" + profile_block + "👇 Tap below to continue:"
-    else:
-        text = (
-            f"🛍️ <b>Welcome to {html_escape(store_name)}!</b>\n\n"
-            + profile_block +
-            "Your premium digital product marketplace.\n"
-            "📦 eBooks, Templates, Courses, Software & more!\n\n"
-            "👇 Tap below to continue:"
-        )
-
-    from utils import welcome_kb
-    from utils import render_screen
     
-    await render_screen(
-        query=None,  # No query for /start command
-        bot=context.bot,
-        chat_id=update.message.chat_id,
-        text=text,
-        reply_markup=welcome_kb(),
-        image_setting_key="welcome_image_id",
-        admin_id=ADMIN_ID
-    )
-
-
-async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show Main Menu Hub (no welcome content, only balance + navigation).
-    
-    Uses render_screen with NO image (hub is text-only by design).
-    """
-    query = update.callback_query
-    await query.answer()
-
-    user = update.effective_user
-    is_admin = user.id == ADMIN_ID
-    store_name = await get_setting("bot_name", "NanoStore")
-
-    context.user_data.pop("state", None)
-    context.user_data.pop("temp", None)
-
-    # Get user balance and cart count
-    currency = await get_setting("currency", "Rs")
+    # Get user data
+    from database import get_cart_count
     balance = await get_user_balance(user.id)
+    cart_count = await get_cart_count(user.id)
     bal_display = int(balance) if balance == int(balance) else f"{balance:.2f}"
     
-    from database import get_cart_count
-    cart_count = await get_cart_count(user.id)
+    # Check if user is admin
+    is_admin = user.id == ADMIN_ID
+    
+    # Clear any state
+    context.user_data.pop("state", None)
+    context.user_data.pop("temp", None)
 
     text = (
         f"🏠 <b>{html_escape(store_name)} — Main Menu</b>\n"
@@ -111,8 +67,43 @@ async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "Choose an option below:"
     )
     
-    from utils import main_menu_kb
-    await safe_edit(query, text, reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count))
+    from utils import main_menu_kb, render_screen
+    
+    if is_command:
+        # Called from /start command - send new message with image
+        await render_screen(
+            query=None,
+            bot=context.bot,
+            chat_id=update.message.chat_id,
+            text=text,
+            reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count),
+            image_setting_key="shop_image_id",  # Use shop image for main menu
+            admin_id=ADMIN_ID
+        )
+    else:
+        # Called from callback - edit existing message
+        query = update.callback_query
+        await render_screen(
+            query=query,
+            bot=context.bot,
+            chat_id=query.message.chat_id,
+            text=text,
+            reply_markup=main_menu_kb(is_admin=is_admin, cart_count=cart_count),
+            image_setting_key="shop_image_id",
+            admin_id=ADMIN_ID
+        )
+
+
+async def main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show Main Menu Hub (callback from button).
+    
+    Uses render_screen with shop_image_id.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    # Use the shared function
+    await _show_main_menu(update, context, is_command=False)
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
