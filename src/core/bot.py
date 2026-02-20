@@ -337,10 +337,9 @@ async def photo_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             
             await set_setting(image_key, file_id)
             
-            # Delete the admin prompt message if stored
-            prompt_msg_id = context.user_data.pop("adm_img_prompt_msg_id", None)
-            if prompt_msg_id:
-                schedule_delete(context, update.message.chat_id, prompt_msg_id, 0, "admin_prompt")
+            # Don't delete the prompt message - it has the back button!
+            # Just clear the stored message_id
+            context.user_data.pop("adm_img_prompt_msg_id", None)
             
             # Delete the admin's uploaded photo after 7s
             schedule_delete(context, update.message.chat_id, update.message.message_id, 7, "admin_uploaded_photo")
