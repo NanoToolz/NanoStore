@@ -171,7 +171,7 @@ async def post_init(application: Application) -> None:
     import subprocess
     from datetime import datetime
     from database import get_setting, set_setting
-    from helpers import send_restart_notification
+    from utils import send_restart_notification
     
     await init_db()
     logger.info("Bot initialized. ADMIN_ID=%s", ADMIN_ID)
