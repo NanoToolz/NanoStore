@@ -520,6 +520,15 @@ def register_handlers(app: Application) -> None:
     
     # Register middleware as handler groups with highest priority
     from telegram.ext import TypeHandler
+    from src.middleware.session_timeout import check_session_timeout
+    
+    # Add session timeout check
+    async def session_timeout_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Check and enforce session timeout."""
+        try:
+            await check_session_timeout(update, context)
+        except Exception as e:
+            logger.warning(f"Session timeout middleware error: {e}")
     
     # Add global middleware for maintenance and membership checks
     async def global_middleware(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -540,6 +549,7 @@ def register_handlers(app: Application) -> None:
         except Exception as e:
             logger.warning(f"Global middleware error: {e}")
     
+    app.add_handler(TypeHandler(Update, session_timeout_middleware), group=-3)
     app.add_handler(TypeHandler(Update, global_middleware), group=-2)
     app.add_handler(TypeHandler(Update, logging_middleware), group=-1)
 

@@ -394,59 +394,72 @@ SUPPORTED_CURRENCIES = {
 
 async def fetch_live_rates() -> dict:
     """
-    Fetch live currency rates from CoinGecko API.
+    Fetch live currency rates from CoinGecko API with retry logic.
     Returns dict of {currency: rate_vs_pkr}.
-    Falls back to cached rates if API fails.
+    Falls back to cached rates if API fails after retries.
     """
     global _currency_cache, _cache_timestamp
     from datetime import datetime, timedelta
     import aiohttp
+    import asyncio
     
     # Check if cache is still valid (5 minutes)
     if _cache_timestamp and (datetime.utcnow() - _cache_timestamp) < timedelta(minutes=5):
         if _currency_cache:
             return _currency_cache
     
-    try:
-        # Fetch rates from CoinGecko (free API, no key needed)
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://api.coingecko.com/api/v3/simple/price",
-                params={
-                    "ids": "tether",  # Use USDT as stable reference
-                    "vs_currencies": "pkr,usd,aed,sar,gbp"
-                },
-                timeout=aiohttp.ClientTimeout(total=5)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    tether = data.get("tether", {})
-                    
-                    # Calculate rates vs PKR
-                    pkr_rate = tether.get("pkr", 280)  # Fallback to 280
-                    rates = {
-                        "PKR": 1.0,  # Base currency
-                        "USD": pkr_rate / tether.get("usd", 1.0),
-                        "AED": pkr_rate / tether.get("aed", 3.67),
-                        "SAR": pkr_rate / tether.get("sar", 3.75),
-                        "GBP": pkr_rate / tether.get("gbp", 0.79),
-                    }
-                    
-                    _currency_cache = rates
-                    _cache_timestamp = datetime.utcnow()
-                    
-                    # Store in database for persistence
-                    import database
-                    for curr, rate in rates.items():
-                        if curr != "PKR":
-                            await database.update_currency_rate(curr, rate)
-                    
-                    logger.info(f"Updated currency rates: {rates}")
-                    return rates
-    except Exception as e:
-        logger.warning(f"Failed to fetch live rates: {e}")
+    # Retry logic with exponential backoff
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Fetch rates from CoinGecko (free API, no key needed)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.coingecko.com/api/v3/simple/price",
+                    params={
+                        "ids": "tether",  # Use USDT as stable reference
+                        "vs_currencies": "pkr,usd,aed,sar,gbp"
+                    },
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        tether = data.get("tether", {})
+                        
+                        # Calculate rates vs PKR
+                        pkr_rate = tether.get("pkr", 280)  # Fallback to 280
+                        rates = {
+                            "PKR": 1.0,  # Base currency
+                            "USD": pkr_rate / tether.get("usd", 1.0),
+                            "AED": pkr_rate / tether.get("aed", 3.67),
+                            "SAR": pkr_rate / tether.get("sar", 3.75),
+                            "GBP": pkr_rate / tether.get("gbp", 0.79),
+                        }
+                        
+                        _currency_cache = rates
+                        _cache_timestamp = datetime.utcnow()
+                        
+                        # Store in database for persistence
+                        import database
+                        for curr, rate in rates.items():
+                            if curr != "PKR":
+                                await database.update_currency_rate(curr, rate)
+                        
+                        logger.info(f"Updated currency rates: {rates}")
+                        return rates
+                    else:
+                        logger.warning(f"API returned status {response.status}, attempt {attempt + 1}/{max_retries}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch live rates (attempt {attempt + 1}/{max_retries}): {e}")
+            
+            # Exponential backoff: wait 1s, 2s, 4s
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.info(f"Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
     
-    # Fallback to database cache
+    # All retries failed - fallback to database cache
+    logger.error("All API retry attempts failed, using database cache")
     if not _currency_cache:
         import database
         _currency_cache = {

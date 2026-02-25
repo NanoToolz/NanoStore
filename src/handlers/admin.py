@@ -215,18 +215,44 @@ async def admin_cat_del_handler(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     cat_id = int(query.data.split(":")[1])
-    cat = await get_category(cat_id)
-    if cat:
-        await delete_category(cat_id)
-        await query.answer(f"✅ '{cat['name']}' deleted!", show_alert=True)
-        await add_action_log("cat_deleted", ADMIN_ID, cat["name"])
+    
+    # Check if confirmation is pending
+    pending_delete = context.user_data.get("pending_cat_delete")
+    if pending_delete == cat_id:
+        # Confirmed - proceed with deletion
+        context.user_data.pop("pending_cat_delete", None)
+        cat = await get_category(cat_id)
+        if cat:
+            await delete_category(cat_id)
+            await query.answer(f"✅ '{cat['name']}' deleted!", show_alert=True)
+            await add_action_log("cat_deleted", ADMIN_ID, cat["name"])
 
-    cats = await get_all_categories()
-    await safe_edit(
-        query,
-        f"📂 <b>Manage Categories</b>\n{separator()}\n\n📦 Total: {len(cats)} categories",
-        reply_markup=admin_cats_kb(cats),
-    )
+        cats = await get_all_categories()
+        await safe_edit(
+            query,
+            f"📂 <b>Manage Categories</b>\n{separator()}\n\n📦 Total: {len(cats)} categories",
+            reply_markup=admin_cats_kb(cats),
+        )
+    else:
+        # First click - ask for confirmation
+        context.user_data["pending_cat_delete"] = cat_id
+        cat = await get_category(cat_id)
+        if cat:
+            from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup
+            confirm_kb = InlineKeyboardMarkup([
+                [Btn("⚠️ Yes, Delete", callback_data=f"adm_cat_del:{cat_id}"),
+                 Btn("❌ Cancel", callback_data=f"adm_cat:{cat_id}")]
+            ])
+            await safe_edit(
+                query,
+                f"⚠️ <b>Confirm Deletion</b>\n{separator()}\n\n"
+                f"Are you sure you want to delete category:\n"
+                f"<b>{html_escape(cat['name'])}</b>?\n\n"
+                f"⚠️ This will also delete all products in this category!",
+                reply_markup=confirm_kb
+            )
+        else:
+            await safe_edit(query, "❌ Category not found.", reply_markup=back_kb("adm_cats"))
 
 
 async def admin_cat_img_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -352,21 +378,47 @@ async def admin_prod_del_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     prod_id = int(query.data.split(":")[1])
-    prod = await get_product(prod_id)
-    if prod:
-        cat_id = prod["category_id"]
-        await delete_product(prod_id)
-        await query.answer(f"✅ '{prod['name']}' deleted!", show_alert=True)
-        await add_action_log("prod_deleted", ADMIN_ID, prod["name"])
-        products = await get_products_by_category(cat_id, limit=50)
-        currency = await get_setting("currency", "Rs")
-        await safe_edit(
-            query,
-            f"📦 <b>Products</b>\n{separator()}\n\n📊 {len(products)} products",
-            reply_markup=admin_prods_kb(products, cat_id, currency),
-        )
+    
+    # Check if confirmation is pending
+    pending_delete = context.user_data.get("pending_prod_delete")
+    if pending_delete == prod_id:
+        # Confirmed - proceed with deletion
+        context.user_data.pop("pending_prod_delete", None)
+        prod = await get_product(prod_id)
+        if prod:
+            cat_id = prod["category_id"]
+            await delete_product(prod_id)
+            await query.answer(f"✅ '{prod['name']}' deleted!", show_alert=True)
+            await add_action_log("prod_deleted", ADMIN_ID, prod["name"])
+            products = await get_products_by_category(cat_id, limit=50)
+            currency = await get_setting("currency", "Rs")
+            await safe_edit(
+                query,
+                f"📦 <b>Products</b>\n{separator()}\n\n📊 {len(products)} products",
+                reply_markup=admin_prods_kb(products, cat_id, currency),
+            )
+        else:
+            await safe_edit(query, "❌ Product not found.", reply_markup=back_kb("adm_cats"))
     else:
-        await safe_edit(query, "❌ Product not found.", reply_markup=back_kb("adm_cats"))
+        # First click - ask for confirmation
+        context.user_data["pending_prod_delete"] = prod_id
+        prod = await get_product(prod_id)
+        if prod:
+            from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup
+            confirm_kb = InlineKeyboardMarkup([
+                [Btn("⚠️ Yes, Delete", callback_data=f"adm_prod_del:{prod_id}"),
+                 Btn("❌ Cancel", callback_data=f"adm_prod:{prod_id}")]
+            ])
+            await safe_edit(
+                query,
+                f"⚠️ <b>Confirm Deletion</b>\n{separator()}\n\n"
+                f"Are you sure you want to delete product:\n"
+                f"<b>{html_escape(prod['name'])}</b>?\n\n"
+                f"⚠️ This action cannot be undone!",
+                reply_markup=confirm_kb
+            )
+        else:
+            await safe_edit(query, "❌ Product not found.", reply_markup=back_kb("adm_cats"))
 
 
 async def admin_prod_img_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1831,10 +1883,11 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # ── Product: price (step 3/3 → create product) ──
     if state == "adm_prod_price":
-        try:
-            price = float(text)
-        except ValueError:
-            msg = await update.message.reply_text("❌ Invalid price. Send a number.", parse_mode="HTML")
+        from src.utils.validators import validate_price
+        
+        is_valid, price, error_msg = validate_price(text)
+        if not is_valid:
+            msg = await update.message.reply_text(error_msg, parse_mode="HTML")
             await auto_delete(msg)
             await auto_delete(update.message)
             return
@@ -1863,16 +1916,17 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # ── Product: edit field ──
     if state.startswith("adm_prod_edit:"):
+        from src.utils.validators import validate_price
+        
         parts = state.split(":")
         prod_id = int(parts[1])
         field = parts[2]
         context.user_data.pop("state", None)
 
         if field == "price":
-            try:
-                value = float(text)
-            except ValueError:
-                msg = await update.message.reply_text("❌ Invalid price.", parse_mode="HTML")
+            is_valid, value, error_msg = validate_price(text)
+            if not is_valid:
+                msg = await update.message.reply_text(error_msg, parse_mode="HTML")
                 await auto_delete(msg)
                 await auto_delete(update.message)
                 return
@@ -1886,15 +1940,18 @@ async def admin_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # ── Product: stock ──
     if state.startswith("adm_prod_stock:"):
+        from src.utils.validators import validate_stock
+        
         prod_id = int(state.split(":")[1])
         context.user_data.pop("state", None)
-        try:
-            stock = int(text)
-        except ValueError:
-            msg = await update.message.reply_text("❌ Send a number.", parse_mode="HTML")
+        
+        is_valid, stock, error_msg = validate_stock(text)
+        if not is_valid:
+            msg = await update.message.reply_text(error_msg, parse_mode="HTML")
             await auto_delete(msg)
             await auto_delete(update.message)
             return
+            
         await update_product(prod_id, stock=stock)
         msg = await update.message.reply_text(
             f"✅ Stock set to {format_stock(stock)}", parse_mode="HTML"
