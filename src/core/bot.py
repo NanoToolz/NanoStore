@@ -820,13 +820,10 @@ def main() -> None:
         if telegram_handler:
             telegram_handler.stop()
             log_activity("SYSTEM", "Bot stopped")
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
-    finally:
-        # Stop telegram handler on shutdown
-        if telegram_handler:
-            telegram_handler.stop()
-            log_activity("SYSTEM", "Bot stopped")
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
