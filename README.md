@@ -1,6 +1,6 @@
-# 🛍️ NanoStore - Telegram Digital Store Bot
+# 🚀 NanoStore - Telegram Digital Store Bot
 
-A powerful, feature-rich Telegram bot for running a digital store with automated product delivery, payment processing, and comprehensive admin panel.
+Professional e-commerce bot for Telegram with complete order management, payment processing, and customer data collection.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -8,76 +8,125 @@ A powerful, feature-rich Telegram bot for running a digital store with automated
 
 ---
 
-## ✨ Key Features
+## ✨ Features
 
-- 🛒 **Product Catalog** - Browse products by category with images
-- 💳 **Payment Processing** - Multiple payment methods with proof verification
-- 🚀 **Auto-Delivery** - Instant digital product delivery
-- 👨‍💼 **Admin Panel** - Comprehensive management dashboard
-- 💰 **Wallet System** - Balance top-up and payments
-- 🎟️ **Coupon System** - Discount codes and promotions
-- 🎰 **Loyalty Rewards** - Daily spin and referral program
-- 🎫 **Support Tickets** - Built-in customer support
-- 📊 **Analytics** - Real-time statistics and reporting
-- 🔒 **Secure** - Race condition protection, transaction safety
+- 🛍️ **Product Management** - Categories, products, stock tracking
+- 💳 **Payment System** - Multiple payment methods, proof verification
+- 📊 **Customer Data** - Complete order history and customer tracking
+- 🎁 **Rewards System** - Referrals, daily spin, coupons
+- 👥 **Admin Panel** - Full control over store operations
+- 🔐 **Security** - All 23 critical security fixes applied
+- 📱 **Professional UI** - Clean, intuitive interface
 
 ---
 
-## 🚀 Quick Start
+## 🎯 Quick Setup
 
-### Using Docker (Recommended)
+### Automated Setup (Recommended)
 
+**Linux/Mac:**
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/nanostore.git
-cd nanostore
-
-# Configure
-cp config/.env.example .env
-# Edit .env with your BOT_TOKEN and ADMIN_ID
-
-# Run
-docker-compose up -d
-
-# View logs
-docker logs -f nanostore-bot
+chmod +x setup.sh
+./setup.sh
 ```
 
-### Using Podman
+**Windows:**
+```powershell
+.\setup.ps1
+```
 
+The setup wizard will guide you through:
+```
+════════════════════════════════════════════════════════════════
+▶ STEP 1: Checking Prerequisites
+════════════════════════════════════════════════════════════════
+✓ Podman installed
+✓ Git installed
+✓ Available disk space: 50GB
+
+Progress: [████████████████████] 100%
+Step 8 of 8
+
+╔════════════════════════════════════════════════════════════════╗
+║                  ✓ SETUP COMPLETED SUCCESSFULLY! ✓            ║
+╚════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 📋 Manual Setup
+
+### 1. Configure Environment
 ```bash
-podman-compose up -d
+cp config/.env.example .env
+nano .env  # Add BOT_TOKEN and ADMIN_ID
+```
+
+### 2. Deploy with Podman
+```bash
+podman build -t nanostore-bot .
+podman run -d --name nanostore-bot --env-file .env -v ./data:/app/data:Z --memory=256m --restart=always nanostore-bot
+```
+
+### 3. Verify
+```bash
 podman logs -f nanostore-bot
 ```
 
-### Manual Installation
+---
+
+## 📊 Customer Data Collection
+
+All customer data is automatically saved in `data/nanostore.db`:
+- ✅ Customer details (name, username, user_id)
+- ✅ Complete order history
+- ✅ Payment proofs and timestamps
+- ✅ Purchase patterns
+
+### Export Customer Data
+```bash
+# Backup database
+cp data/nanostore.db backups/backup_$(date +%Y%m%d).db
+
+# View with SQLite
+sqlite3 data/nanostore.db "SELECT * FROM orders;"
+```
+
+---
+
+## 🛠️ Management Commands
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# View logs
+podman logs -f nanostore-bot
 
-# Configure
-cp config/.env.example .env
-# Edit .env
+# Restart bot
+podman restart nanostore-bot
 
-# Run
-python bot.py
+# Stop bot
+podman stop nanostore-bot
+
+# Update bot
+git pull origin GPT
+podman build -t nanostore-bot .
+podman restart nanostore-bot
+
+# Backup database
+cp data/nanostore.db backups/backup_$(date +%Y%m%d).db
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-### Required Environment Variables
-
-```env
-BOT_TOKEN=your_bot_token_here          # From @BotFather
-ADMIN_ID=your_telegram_user_id         # Your Telegram ID
+### Required (.env file)
+```bash
+BOT_TOKEN=your_bot_token_here          # Get from @BotFather
+ADMIN_ID=your_telegram_user_id         # Get from @userinfobot
 ```
 
-### Optional Variables
-
-```env
+### Optional
+```bash
 LOG_CHANNEL_ID=-1001234567890          # Logging channel
 PROOFS_CHANNEL_ID=-1001234567890       # Payment proofs channel
 LOG_TO_CHANNEL=true                    # Enable channel logging
@@ -86,17 +135,13 @@ LOG_LEVEL=INFO                         # Logging level
 
 ---
 
-## 📦 Requirements
+## 📚 Documentation
 
-- Python 3.11+
-- SQLite (included)
-- Telegram Bot Token
-
-### Dependencies
-- `python-telegram-bot==21.7`
-- `aiosqlite==0.20.0`
-- `aiohttp==3.11.10`
-- `python-dotenv==1.0.1`
+- **Setup Guide**: `docs/deployment/PODMAN_SETUP_GUIDE.md`
+- **Urdu Guide**: `docs/deployment/PODMAN_SETUP_URDU.md`
+- **Features**: `docs/FEATURES.md`
+- **Quick Start**: `QUICK_START.md`
+- **Structure**: `docs/STRUCTURE.md`
 
 ---
 
@@ -107,51 +152,39 @@ LOG_LEVEL=INFO                         # Logging level
 - **RAM**: 128-256 MB
 - **Disk**: 100 MB + database
 
-### Docker Compose
-```yaml
-services:
-  nanostore-bot:
-    build: .
-    restart: unless-stopped
-    env_file: .env
-    volumes:
-      - ./data:/app/data
+### Docker/Podman
+```bash
+# Build
+podman build -t nanostore-bot .
+
+# Run
+podman run -d \
+  --name nanostore-bot \
+  --env-file .env \
+  -v ./data:/app/data:Z \
+  --memory=256m \
+  --cpus=0.5 \
+  --restart=always \
+  nanostore-bot
 ```
 
 ---
 
-## 📚 Documentation
+## ✅ Production Ready
 
-- [📖 Features Guide](docs/FEATURES.md) - Complete feature list
-- [🏗️ Project Structure](docs/STRUCTURE.md) - Code architecture
-- [📝 Logging Guide](docs/LOGGING.md) - Logging setup
-- [📜 Changelog](docs/CHANGELOG.md) - Version history
-- [📋 Deployment Guides](docs/deployment/) - Production deployment
-- [🧪 Testing & Contributing](docs/guides/) - Development guides
-
----
-
-## 🛠️ Project Structure
-
-```
-nanostore/
-├── bot.py              # Entry point
-├── requirements.txt    # Dependencies
-├── Dockerfile          # Container image
-├── docker-compose.yml  # Docker deployment
-├── src/                # Source code
-├── docs/               # Documentation
-├── data/               # Database (auto-created)
-└── config/             # Configuration
-```
-
-See [docs/PROJECT_STRUCTURE_EXPLAINED.md](docs/PROJECT_STRUCTURE_EXPLAINED.md) for detailed explanation.
+- ✓ All critical security fixes applied
+- ✓ Cross-platform compatible (Windows/Linux/macOS)
+- ✓ Lightweight (256MB RAM)
+- ✓ Auto-restart enabled
+- ✓ Professional setup wizard
+- ✓ Customer data collection
+- ✓ Complete order tracking
 
 ---
 
-## 🔧 Recent Improvements
+## 🔧 Recent Updates
 
-### Phase 1 Critical Fixes ✅
+### Phase 1 Complete ✅
 - Atomic stock decrement (race condition eliminated)
 - Idempotency checks for payments
 - Transaction safety with rollback
@@ -159,12 +192,19 @@ See [docs/PROJECT_STRUCTURE_EXPLAINED.md](docs/PROJECT_STRUCTURE_EXPLAINED.md) f
 - Windows compatibility
 - 15 database indexes (5-200x faster)
 - Security hardening
+- Repository cleaned
+- Professional setup scripts
 
 ---
 
-## 🤝 Contributing
+## 📞 Support
 
-Contributions welcome! See [docs/guides/CONTRIBUTING.md](docs/guides/CONTRIBUTING.md)
+For issues or questions, check the logs:
+```bash
+podman logs nanostore-bot
+```
+
+Or refer to documentation in `docs/` folder.
 
 ---
 
@@ -174,13 +214,6 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/nanostore/issues)
-- **Documentation**: [docs/](docs/)
-
----
-
-**Made with ❤️ by the NanoStore Team**
-
-**Version**: 1.0.0 | **Status**: ✅ Production Ready
+**Version**: 1.0 (Production Ready)  
+**Last Updated**: February 25, 2026  
+**Made with ❤️ for digital store owners**
