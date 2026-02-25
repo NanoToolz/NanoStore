@@ -23,7 +23,7 @@ A powerful, feature-rich Telegram bot for running a digital store with automated
 
 ---
 
-## � Quick Start
+## 🚀 Quick Start
 
 ### Using Docker (Recommended)
 
@@ -125,9 +125,9 @@ services:
 - [📖 Features Guide](docs/FEATURES.md) - Complete feature list
 - [🏗️ Project Structure](docs/STRUCTURE.md) - Code architecture
 - [📝 Logging Guide](docs/LOGGING.md) - Logging setup
-- [📜 Changelog](CHANGELOG.md) - Version history
+- [📜 Changelog](docs/CHANGELOG.md) - Version history
 - [📋 Deployment Guides](docs/deployment/) - Production deployment
-- [🧪 Testing Guides](docs/guides/) - Testing instructions
+- [🧪 Testing & Contributing](docs/guides/) - Development guides
 
 ---
 
@@ -135,18 +135,17 @@ services:
 
 ```
 nanostore/
-├── src/
-│   ├── core/           # Bot initialization
-│   ├── handlers/       # Command handlers
-│   ├── database/       # Database operations
-│   ├── middleware/     # Middleware
-│   └── utils/          # Utilities
-├── data/               # Database (auto-created)
-├── docs/               # Documentation
 ├── bot.py              # Entry point
 ├── requirements.txt    # Dependencies
-└── Dockerfile          # Container image
+├── Dockerfile          # Container image
+├── docker-compose.yml  # Docker deployment
+├── src/                # Source code
+├── docs/               # Documentation
+├── data/               # Database (auto-created)
+└── config/             # Configuration
 ```
+
+See [docs/PROJECT_STRUCTURE_EXPLAINED.md](docs/PROJECT_STRUCTURE_EXPLAINED.md) for detailed explanation.
 
 ---
 
