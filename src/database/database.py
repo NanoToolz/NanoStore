@@ -15,7 +15,7 @@ _db: Optional[aiosqlite.Connection] = None
 
 
 async def get_db() -> aiosqlite.Connection:
-    """Get or create DB connection."""
+    """Get or create DB connection with timeout."""
     global _db
     if _db is None:
         # Ensure data directory exists
@@ -24,7 +24,7 @@ async def get_db() -> aiosqlite.Connection:
         db_dir = Path(DB_PATH).parent
         db_dir.mkdir(parents=True, exist_ok=True)
         
-        _db = await aiosqlite.connect(DB_PATH)
+        _db = await aiosqlite.connect(DB_PATH, timeout=10.0)  # 10 second timeout
         _db.row_factory = aiosqlite.Row
         await _db.execute("PRAGMA journal_mode=WAL")
         await _db.execute("PRAGMA foreign_keys=ON")
@@ -110,7 +110,8 @@ async def init_db() -> None:
             product_id  INTEGER NOT NULL,
             quantity    INTEGER DEFAULT 1,
             added_at    TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+            UNIQUE(user_id, product_id)
         );
 
         CREATE TABLE IF NOT EXISTS orders (
@@ -226,6 +227,33 @@ async def init_db() -> None:
             rate_vs_pkr REAL NOT NULL,
             updated_at  TEXT DEFAULT (datetime('now'))
         );
+        
+        -- Performance indexes
+        CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+        CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
+        CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status, created_at DESC);
+        
+        CREATE INDEX IF NOT EXISTS idx_cart_user_id ON cart(user_id);
+        CREATE INDEX IF NOT EXISTS idx_cart_product_id ON cart(product_id);
+        
+        CREATE INDEX IF NOT EXISTS idx_payment_proofs_status ON payment_proofs(status);
+        CREATE INDEX IF NOT EXISTS idx_payment_proofs_order_id ON payment_proofs(order_id);
+        CREATE INDEX IF NOT EXISTS idx_payment_proofs_user_id ON payment_proofs(user_id);
+        
+        CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON tickets(user_id);
+        CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+        CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at DESC);
+        
+        CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);
+        CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
+        
+        CREATE INDEX IF NOT EXISTS idx_wallet_topups_user_id ON wallet_topups(user_id);
+        CREATE INDEX IF NOT EXISTS idx_wallet_topups_status ON wallet_topups(status);
+        
+        CREATE INDEX IF NOT EXISTS idx_points_history_user_id ON points_history(user_id);
+        CREATE INDEX IF NOT EXISTS idx_referrals_referrer_id ON referrals(referrer_id);
     """)
 
     # Default settings
@@ -345,13 +373,40 @@ async def get_user_balance(user_id: int) -> float:
     return row["balance"] if row else 0.0
 
 
-async def update_user_balance(user_id: int, amount: float) -> None:
+async def update_user_balance(user_id: int, amount: float, commit: bool = True) -> bool:
+    """
+    Atomically update user balance. Returns True if successful, False if insufficient balance.
+    For negative amounts (deductions), validates balance is sufficient.
+    
+    Args:
+        user_id: User ID to update
+        amount: Amount to add (positive) or deduct (negative)
+        commit: Whether to commit the transaction (default True)
+    """
     db = await get_db()
-    await db.execute(
-        "UPDATE users SET balance = MAX(0, balance + ?) WHERE user_id = ?",
-        (amount, user_id),
-    )
-    await db.commit()
+    
+    if amount < 0:
+        # Deduction - check balance is sufficient
+        cur = await db.execute(
+            """UPDATE users 
+               SET balance = balance + ? 
+               WHERE user_id = ? AND balance >= ?
+               RETURNING balance""",
+            (amount, user_id, abs(amount)),
+        )
+        row = await cur.fetchone()
+        if commit:
+            await db.commit()
+        return row is not None
+    else:
+        # Addition - always succeeds
+        await db.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (amount, user_id),
+        )
+        if commit:
+            await db.commit()
+        return True
 
 
 # ======================== CATEGORIES ========================
@@ -486,14 +541,26 @@ async def search_products(query: str) -> list:
     return _rows_to_list(await cur.fetchall())
 
 
-async def decrement_stock(product_id: int, quantity: int) -> None:
+async def decrement_stock(product_id: int, quantity: int, commit: bool = True) -> bool:
+    """
+    Atomically decrement stock. Returns True if successful, False if insufficient stock.
+    
+    Args:
+        product_id: Product ID to decrement
+        quantity: Quantity to decrement
+        commit: Whether to commit the transaction (default True)
+    """
     db = await get_db()
-    await db.execute(
+    cur = await db.execute(
         """UPDATE products SET stock = stock - ?
-           WHERE id = ? AND stock > 0""",
-        (quantity, product_id),
+           WHERE id = ? AND stock >= ?
+           RETURNING stock""",
+        (quantity, product_id, quantity),
     )
-    await db.commit()
+    row = await cur.fetchone()
+    if commit:
+        await db.commit()
+    return row is not None
 
 
 # ======================== PRODUCT FAQ & MEDIA ========================
@@ -723,13 +790,28 @@ async def validate_coupon(code: str) -> Optional[dict]:
     return _row_to_dict(await cur.fetchone())
 
 
-async def use_coupon(code: str) -> None:
+async def use_coupon(code: str, commit: bool = True) -> bool:
+    """
+    Atomically increment coupon usage. Returns True if successful, False if max uses reached.
+    
+    Args:
+        code: Coupon code to use
+        commit: Whether to commit the transaction (default True)
+    """
     db = await get_db()
-    await db.execute(
-        "UPDATE coupons SET used_count = used_count + 1 WHERE code = ?",
+    cur = await db.execute(
+        """UPDATE coupons 
+           SET used_count = used_count + 1 
+           WHERE code = ? 
+             AND active = 1 
+             AND (max_uses = 0 OR used_count < max_uses)
+           RETURNING used_count""",
         (code,),
     )
-    await db.commit()
+    row = await cur.fetchone()
+    if commit:
+        await db.commit()
+    return row is not None
 
 
 async def get_all_coupons() -> list:

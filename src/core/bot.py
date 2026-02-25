@@ -730,6 +730,8 @@ def register_handlers(app: Application) -> None:
 def main() -> None:
     """Start the bot."""
     import asyncio
+    import signal
+    import platform
     
     # Setup logging FIRST (before any other imports that use logging)
     telegram_handler = setup_telegram_logging(
@@ -767,11 +769,49 @@ def main() -> None:
 
     register_handlers(app)
 
+    # Graceful shutdown handler
+    async def shutdown(sig):
+        """Gracefully shutdown the bot."""
+        logger.info(f"Received exit signal {sig.name if hasattr(sig, 'name') else sig}...")
+        log_activity("SYSTEM", f"Bot shutting down (signal: {sig.name if hasattr(sig, 'name') else sig})")
+        
+        # Stop telegram handler
+        if telegram_handler:
+            telegram_handler.stop()
+        
+        # Stop the application
+        await app.stop()
+        await app.shutdown()
+        
+        logger.info("Bot stopped gracefully")
+        log_activity("SYSTEM", "Bot stopped")
+    
+    # Register signal handlers for graceful shutdown (Unix/Linux only)
+    if platform.system() != 'Windows':
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(
+                sig,
+                lambda s=sig: asyncio.create_task(shutdown(s))
+            )
+        logger.info("Signal handlers registered for graceful shutdown")
+    else:
+        logger.info("Running on Windows - graceful shutdown via KeyboardInterrupt only")
+
     logger.info("Bot is running. Press Ctrl+C to stop.")
     log_activity("SYSTEM", "Bot is running and ready")
     
     try:
         app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt")
+    finally:
+        # Stop telegram handler on shutdown
+        if telegram_handler:
+            telegram_handler.stop()
+            log_activity("SYSTEM", "Bot stopped")
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt")
     finally:
         # Stop telegram handler on shutdown
         if telegram_handler:

@@ -852,6 +852,16 @@ async def admin_proof_approve_handler(update: Update, context: ContextTypes.DEFA
         await query.answer("❌ Proof not found.", show_alert=True)
         return
 
+    # Idempotency check - prevent double approval
+    if proof["status"] == "approved":
+        await query.answer("⚠️ Already approved!", show_alert=True)
+        return
+    
+    order = await get_order(proof["order_id"])
+    if order and order["payment_status"] == "paid":
+        await query.answer("⚠️ Order already paid!", show_alert=True)
+        return
+
     await update_proof(proof_id, status="approved", reviewed_by=ADMIN_ID)
     await update_order(proof["order_id"], payment_status="paid")
     await add_action_log("proof_approved", ADMIN_ID, f"Proof #{proof_id}, Order #{proof['order_id']}")
@@ -916,8 +926,10 @@ async def admin_proof_approve_handler(update: Update, context: ContextTypes.DEFA
     )
 
 
-async def _deliver_product_to_user(bot, user_id: int, prod: dict, item: dict, currency: str) -> None:
+async def _deliver_product_to_user(bot, user_id: int, prod: dict, item: dict, currency: str) -> bool:
     """Send the product delivery data to the user.
+    
+    Returns True if delivered successfully, False otherwise.
 
     Handles different delivery_data formats:
     - Plain text (starts with no prefix) → send as text message
@@ -925,9 +937,11 @@ async def _deliver_product_to_user(bot, user_id: int, prod: dict, item: dict, cu
     """
     delivery_data = prod.get("delivery_data", "")
     if not delivery_data:
-        return
+        logger.error(f"No delivery data for product {prod['id']}")
+        return False
 
     product_name = html_escape(prod["name"])
+    success = False
 
     # Caption / header for the delivery message
     header = (
@@ -945,34 +959,59 @@ async def _deliver_product_to_user(bot, user_id: int, prod: dict, item: dict, cu
                 caption=header + "Here is your digital product! ⚡",
                 parse_mode="HTML",
             )
-            return
-        except Exception:
-            pass
+            success = True
+            return True
+        except Exception as e:
+            logger.warning(f"Document delivery failed for product {prod['id']}: {e}")
+        
         # Maybe it's a photo file_id
-        try:
-            await bot.send_photo(
-                chat_id=user_id,
-                photo=delivery_data,
-                caption=header + "Here is your digital product! ⚡",
-                parse_mode="HTML",
-            )
-            return
-        except Exception:
-            pass
+        if not success:
+            try:
+                await bot.send_photo(
+                    chat_id=user_id,
+                    photo=delivery_data,
+                    caption=header + "Here is your digital product! ⚡",
+                    parse_mode="HTML",
+                )
+                success = True
+                return True
+            except Exception as e:
+                logger.warning(f"Photo delivery failed for product {prod['id']}: {e}")
 
     # Plain text delivery (license key, download link, instructions)
-    try:
-        await bot.send_message(
-            chat_id=user_id,
-            text=(
-                header
-                + delivery_data
-                + "\n\n⚡ <i>Delivered automatically. Enjoy your purchase!</i>"
-            ),
-            parse_mode="HTML",
-        )
-    except Exception as e:
-        logger.warning("Failed to auto-deliver to user %s: %s", user_id, e)
+    if not success:
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=(
+                    header
+                    + delivery_data
+                    + "\n\n⚡ <i>Delivered automatically. Enjoy your purchase!</i>"
+                ),
+                parse_mode="HTML",
+            )
+            success = True
+        except Exception as e:
+            logger.error(f"All delivery methods failed for user {user_id}, product {prod['id']}: {e}")
+    
+    # Notify admin if delivery failed
+    if not success:
+        try:
+            await bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"🚨 <b>Auto-Delivery Failed</b>\n"
+                    f"{separator()}\n\n"
+                    f"👤 User: {user_id}\n"
+                    f"📦 Product: {product_name} (#{prod['id']})\n"
+                    f"⚠️ Please deliver manually!"
+                ),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+    
+    return success
 
 
 async def admin_proof_reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1541,7 +1580,7 @@ async def admin_broadcast_handler(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def admin_broadcast_confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send the broadcast to all non-banned users."""
+    """Send the broadcast to all non-banned users with rate limiting."""
     query = update.callback_query
     await query.answer()
     if not _is_admin(update.effective_user.id):
@@ -1559,12 +1598,17 @@ async def admin_broadcast_confirm_handler(update: Update, context: ContextTypes.
     sent = 0
     failed = 0
 
-    for uid in user_ids:
+    # Rate limit: 25 messages/second (safe margin below Telegram's 30/sec limit)
+    for i, uid in enumerate(user_ids):
         try:
             await context.bot.send_message(
                 chat_id=uid, text=broadcast_text, parse_mode="HTML"
             )
             sent += 1
+            
+            # Sleep every 25 messages to avoid rate limits
+            if (i + 1) % 25 == 0:
+                await asyncio.sleep(1)
         except Exception:
             failed += 1
 
@@ -1662,7 +1706,13 @@ async def admin_topup_approve_handler(update: Update, context: ContextTypes.DEFA
     credit = topup["amount"] + (topup["amount"] * bonus_percent / 100)
 
     await update_topup(topup_id, status="approved", reviewed_by=ADMIN_ID)
-    await update_user_balance(topup["user_id"], credit)
+    
+    # Credit balance - check if successful
+    success = await update_user_balance(topup["user_id"], credit)
+    if not success:
+        await query.answer("❌ Failed to credit balance. Please contact support.", show_alert=True)
+        logger.error(f"Failed to credit balance for topup #{topup_id}, user {topup['user_id']}")
+        return
     
     # Track total deposited
     await update_user_deposited(topup["user_id"], topup["amount"])

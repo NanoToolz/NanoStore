@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  nanostore-bot:
+    build: .
+    container_name: nanostore-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Persist database
+      - ./data:/app/data:Z
+      # Mount config (optional)
+      - ./.env:/app/.env:ro,Z
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Resource limits (lightweight)
+    cpus: 0.5
+    mem_limit: 256m
+    mem_reservation: 128m
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

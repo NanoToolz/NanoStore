@@ -2,6 +2,7 @@
 
 import json
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config import ADMIN_ID, PROOFS_CHANNEL_ID
@@ -25,6 +26,8 @@ from database import (
     create_payment_proof,
     decrement_stock,
     add_action_log,
+    get_db,
+    get_product,
 )
 from utils import (
     safe_edit,
@@ -261,25 +264,55 @@ async def confirm_order_handler(update: Update, context: ContextTypes.DEFAULT_TY
     balance_used = temp.get("balance_used", 0.0)
     coupon_code = temp.get("coupon_code")
 
-    # Deduct balance if used
-    if balance_used > 0:
-        await update_user_balance(user_id, -balance_used)
+    # Wrap all operations in a transaction
+    db = await get_db()
+    try:
+        await db.execute("BEGIN TRANSACTION")
+        
+        # Deduct balance if used (don't commit yet)
+        if balance_used > 0:
+            success = await update_user_balance(user_id, -balance_used, commit=False)
+            if not success:
+                await db.execute("ROLLBACK")
+                await query.answer("❌ Insufficient balance. Please try again.", show_alert=True)
+                return
 
-    # Use coupon
-    if coupon_code:
-        await use_coupon(coupon_code)
+        # Use coupon (don't commit yet)
+        if coupon_code:
+            success = await use_coupon(coupon_code, commit=False)
+            if not success:
+                await db.execute("ROLLBACK")
+                await query.answer("❌ Coupon no longer valid or max uses reached.", show_alert=True)
+                return
 
-    # Decrement stock
-    items = json.loads(order["items_json"])
-    for item in items:
-        await decrement_stock(item["product_id"], item["quantity"])
+        # Decrement stock with validation (don't commit yet)
+        items = json.loads(order["items_json"])
+        for item in items:
+            success = await decrement_stock(item["product_id"], item["quantity"], commit=False)
+            if not success:
+                # Rollback if insufficient stock
+                await db.execute("ROLLBACK")
+                prod = await get_product(item["product_id"])
+                prod_name = prod["name"] if prod else f"Product #{item['product_id']}"
+                await query.answer(f"❌ Insufficient stock for {prod_name}. Please update your cart.", show_alert=True)
+                return
 
-    # Update order total
-    final_total = max(0, order["total"] - discount - balance_used)
-    await update_order(order_id, status="confirmed")
+        # Update order total
+        final_total = max(0, order["total"] - discount - balance_used)
+        await update_order(order_id, status="confirmed")
 
-    # Clear cart
-    await clear_cart(user_id)
+        # Clear cart
+        await clear_cart(user_id)
+        
+        # Commit transaction (all operations succeed together)
+        await db.commit()
+        
+    except Exception as e:
+        # Rollback on any error
+        await db.execute("ROLLBACK")
+        logger.error(f"Order confirmation failed for order {order_id}: {e}", exc_info=True)
+        await query.answer("❌ Order failed. Please try again.", show_alert=True)
+        return
 
     # Clear temp
     context.user_data.pop("temp", None)

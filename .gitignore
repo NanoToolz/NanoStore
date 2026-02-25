@@ -22,9 +22,21 @@ wheels/
 
 # Virtual Environment
 venv/
-ENV/
 env/
+ENV/
 .venv
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Database
+data/*.db
+data/*.db-shm
+data/*.db-wal
+*.sqlite
+*.sqlite3
 
 # IDE
 .vscode/
@@ -34,41 +46,30 @@ env/
 *~
 .DS_Store
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Database
-data/
-*.db
-*.db-wal
-*.db-shm
-*.db-journal
-
-# Testing
-.pytest_cache/
-.hypothesis/
-.coverage
-htmlcov/
-*.cover
-.tox/
-
 # Logs
 *.log
 logs/
 
-# Temporary files
-*.tmp
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Backup files
 *.bak
 *.backup
-.cache/
+backups/
 
 # OS
 Thumbs.db
 .DS_Store
 
-# Project specific
-prototype/
-tests/
-docs/_build/
+# Container
+.dockerignore
